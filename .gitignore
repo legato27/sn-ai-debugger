@@ -1,0 +1,8 @@
+node_modules/
+test/.tls/
+*.zip
+*.pem
+*.key
+.DS_Store
+coverage/
+.claude/

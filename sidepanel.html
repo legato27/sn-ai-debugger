@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ServiceNow AI Debugger</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">◆</span>
+      <div>
+        <div class="title">AI Debugger</div>
+        <div class="sub" id="instance">No ServiceNow tab</div>
+      </div>
+    </div>
+    <button class="icon" id="btnSettings" title="Settings" aria-label="Settings">⚙</button>
+  </header>
+
+  <section id="settings" class="card hidden" aria-label="Settings">
+    <label>Log window (± minutes) <input type="number" id="setWindow" min="0" max="60"></label>
+    <label>Rows per table <input type="number" id="setRows" min="5" max="500"></label>
+    <label>Plan counts as stuck after (minutes) <input type="number" id="setStuck" min="1" max="1440"></label>
+    <label class="chk"><input type="checkbox" id="setRedact"> Redact PII in exports</label>
+    <label class="chk"><input type="checkbox" id="setBodies"> Include prompt and response bodies in exports</label>
+    <p class="hint">Everything stays in this browser. The extension only sends GET requests to your instance, using your own session.</p>
+    <h2 class="sub-h">Stop actions (optional)</h2>
+    <label class="chk"><input type="checkbox" id="setActions"> Offer "stop" scripts for runs, stuck runs and agents</label>
+    <p class="hint">The extension never runs them. It opens Scripts - Background with the script filled in, in dry-run mode, and you click Run. Needs admin on the instance.</p>
+    <h2 class="sub-h">Claude analysis (optional)</h2>
+    <label>Anthropic API key <input type="password" id="setKey" placeholder="sk-ant-…" autocomplete="off" spellcheck="false"></label>
+    <label>Model <select id="setModel"></select></label>
+    <label class="chk"><input type="checkbox" id="setClaudeBodies"> Send prompt, response and tool input/output bodies (redacted)</label>
+    <label class="chk"><input type="checkbox" id="setAsk"> Ask me before each send to Claude</label>
+    <p class="hint">With a key set, "Analyse with Claude" sends a redacted summary of the trace to api.anthropic.com under your key. The key is saved in this browser profile only. Without a key, use "Copy prompt for claude.ai".</p>
+  </section>
+
+  <section class="card">
+    <div class="row">
+      <input id="q" type="text" placeholder="sys_id, record URL, plan number or agent / skill name" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="row buttons">
+      <button id="btnTrace" class="primary">Trace</button>
+      <button id="btnPage" title="Trace the record open in the current tab">Use this page</button>
+      <button id="btnRecent" title="List the latest execution plans">Recent runs</button>
+    </div>
+    <div id="perm" class="hint hidden">This domain is not a *.service-now.com host. <button id="btnGrant" class="link">Allow this domain</button></div>
+    <div id="progress" class="progress" aria-live="polite"></div>
+  </section>
+
+  <main id="out"></main>
+
+  <footer class="bottom">
+    <button id="btnCopy" disabled>Copy report</button>
+    <button id="btnJson" disabled>Download evidence</button>
+  </footer>
+
+  <script type="module" src="sidepanel.js"></script>
+</body>
+</html>
