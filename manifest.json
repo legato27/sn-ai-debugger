@@ -3,7 +3,7 @@
   "name": "ServiceNow AI Debugger",
   "short_name": "SN AI Debug",
   "version": "0.5.0",
-  "description": "Read-only root-cause analysis for ServiceNow AI Agents, agentic workflows and Now Assist skills, using your own logged-in session, with optional stop scripts you review and run yourself.",
+  "description": "Read-only root-cause analysis for ServiceNow AI Agents, agentic workflows and Now Assist skills, using your own logged-in session, with optional stop scripts you review and run yourself. Independent open-source tool, not affiliated with ServiceNow.",
   "minimum_chrome_version": "116",
   "action": {
     "default_title": "ServiceNow AI Debugger",

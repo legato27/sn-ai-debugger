@@ -2,6 +2,8 @@
 
 2026-10-29 · Joseph · Version 0.5.0
 
+> Independent open-source project. Not affiliated with, endorsed by, or supported by ServiceNow or Anthropic. "ServiceNow", "Now Assist" and "Claude" are trademarks of their owners.
+
 ## Overview
 
 ServiceNow AI Debugger is a Chrome side panel that tells you why an AI Agent run, agentic workflow, tool or Now Assist skill failed, in seconds, without leaving the instance. You give it a record (or open one), and it gathers the configuration and logs around it, runs a set of fixed rules, and shows the most likely root cause with a suggested fix. If you add an Anthropic API key, Claude can also write up the analysis and answer follow-up questions.
