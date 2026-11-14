@@ -1,6 +1,6 @@
 # SN AI Debugger
 
-A Chrome side panel that finds out why a ServiceNow AI Agent run, agentic workflow, tool or Now Assist skill failed. You give it a record (or open one); it reads the configuration and logs around it through your own logged-in session, runs 45 deterministic rules, and shows the most likely root cause with a suggested fix.
+A Chrome side panel that finds out why a ServiceNow AI Agent run, agentic workflow, tool or Now Assist skill failed. You give it a record (or open one); it reads the configuration and logs around it through your own logged-in session, runs 51 deterministic rules, and shows the most likely root cause with a suggested fix.
 
 ![Side panel showing the most likely root cause and findings](docs/images/panel-root-cause.png)
 
@@ -10,7 +10,8 @@ A Chrome side panel that finds out why a ServiceNow AI Agent run, agentic workfl
 
 - **Traces a run end to end.** From an execution plan it collects the tasks, agent messages, tool executions (input and output), the agents and workflow involved, their tools and what each tool calls, ACLs and the run-as user's roles, then the Generative AI log, system log, outbound HTTP calls, flows, restricted caller access and AI Guardian rows in the run's time window, plus AI app versions.
 - **Starts from anything.** A plan, task, tool execution, agent, workflow, tool, skill, prompt, Gen AI log entry, Virtual Agent conversation, a record URL, a name, or the record open in the current tab.
-- **Ranks root causes.** 45 rules (tool input casing mismatches, empty tool results, ACL role gaps, broken script includes, supervised tools on unattended runs, LLM errors, stuck plans, overlapping agent descriptions, re-ask loops and more). A failed plan is treated as a symptom: the rule closest to the cause wins.
+- **Finds the failures for you.** **Recent failures** lists failed or stuck agent runs and failed or user-rejected skill calls from the last 7 days, each with its reason, including runs the platform terminated for Security Violation or Execution Failed. Repeats are merged with a count.
+- **Ranks root causes.** 51 rules (tool input casing mismatches, empty tool results, ACL role gaps, broken script includes, supervised tools on unattended runs, LLM errors, unfilled prompt variables, answers cut off at the token limit, stuck plans, overlapping agent descriptions, re-ask loops and more). A failed plan is treated as a symptom: the rule closest to the cause wins. Every finding links to the records it was raised from.
 - **Release-aware (Brazil ready).** Reads the instance release and patch, checks the deny-by-default ACLs Brazil introduced for agents, workflows, skills, flows and flow actions, and spots runaway triggers and Kill Switch disables.
 - **Shows the conversation as the user lived it.** One timeline merges the Virtual Agent transcript, agent messages, tasks, tool calls, LLM calls and errors.
 - **Optional Claude analysis.** With your own Anthropic API key, sends a redacted summary to Claude for a written root cause, causal chain, fix and verification steps, with follow-up questions.
@@ -33,7 +34,7 @@ Works on `*.service-now.com` and `*.servicenowservices.com`. For a custom domain
 ## Quick start
 
 1. Open a failed execution plan (or an agent, tool or skill) in ServiceNow.
-2. Click **Use this page**. Or paste a sys_id, URL or name and click **Trace**, or pick from **Recent runs**.
+2. Click **Use this page**. Or paste a sys_id, URL or name and click **Trace**, or pick from **Recent failures**.
 3. Read **Most likely root cause** first, then **Also check**, the findings and the timeline.
 4. Use **Copy report** to paste the result into an incident or a support case.
 
@@ -68,12 +69,12 @@ See [SECURITY.md](SECURITY.md) for details and how to report a problem.
 
 ## Status
 
-Version 0.5.0. Tested against a mock ServiceNow instance, a mock Messages API and an in-memory Glide runtime (35 Node tests plus a Chromium end-to-end run). **Not yet validated on a live AI Agent Studio instance**: several table names are best guesses that the extension probes at run time (see [Architecture](docs/ARCHITECTURE.md#table-names)). Issues and pull requests with real-instance findings are welcome.
+Version 0.5.0. Tested against a mock ServiceNow instance, a mock Messages API and an in-memory Glide runtime (51 Node tests plus a Chromium end-to-end run). Checked read-only against one live instance (Australia patch 7): the table names the extension probes at run time all exist there (see [Architecture](docs/ARCHITECTURE.md#table-names)). Other releases may differ; issues and pull requests with real-instance findings are welcome.
 
 ## Development
 
 ```bash
-npm test          # 35 Node tests: collectors, rules, redaction, timeline, Claude client, stop scripts
+npm test          # 51 Node tests: collectors, rules, skills, redaction, timeline, Claude client, stop scripts
 ```
 
 End-to-end test (loads the extension in Chromium against a local mock instance; needs Playwright):

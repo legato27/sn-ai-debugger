@@ -2,7 +2,7 @@ import { makeTabClient } from './lib/sn-client.js';
 import { Collector, parseSnUrl } from './lib/collectors.js';
 import { runRules, SEVERITY } from './lib/rules.js';
 import { redactEvidence } from './lib/redact.js';
-import { toMarkdown } from './lib/report.js';
+import { toMarkdown, evidenceTable } from './lib/report.js';
 import { DEFAULT_SETTINGS, KIND_LABEL } from './lib/config.js';
 import { KIND_LABEL as TL_LABEL } from './lib/timeline.js';
 import { availableActions, pageFillScript } from './lib/actions.js';
@@ -135,6 +135,7 @@ function render(ev, rca) {
       <div class="rc-title"><span class="sev ${f.severity}">${f.severity}</span>${esc(f.title)}</div>
       ${f.detail ? `<div class="fd">${esc(f.detail)}</div>` : ''}
       ${f.fix ? `<div class="fx"><b>Fix:</b> ${esc(f.fix)}</div>` : ''}
+      ${evidenceLinks(f)}
       <div class="rid">${esc(f.id)}</div>
       ${rca.alsoLikely?.length ? `<div class="also"><b>Also check:</b><ul>${rca.alsoLikely.map(a => `<li><span class="sev ${a.severity}">${a.severity}</span>${esc(a.title)}</li>`).join('')}</ul></div>` : ''}</section>`);
   }
@@ -162,8 +163,18 @@ function render(ev, rca) {
   if (ev.root) out.push('<section class="card claude" id="claudeCard"></section>');
   if (ev.root) out.push('<section class="card actions hidden" id="actionsCard"></section>');
 
+  if (ev.recentFailures) {
+    const days = ev.meta.failureWindow?.days ?? 7;
+    const list = ev.recentFailures;
+    out.push(`<section class="card"><h2>Recent failures (${list.length}${list.length > 25 ? ', newest 25' : ''})</h2>
+      ${list.length ? list.slice(0, 25).map(x => `
+      <div class="list-item"><div><div>${esc(x.display)}${x.count > 1 ? ` <span class="badge" title="Same failure ${x.count} times; the newest is traced">×${x.count}</span>` : ''}</div><div class="meta">${esc(x.label)} · ${x.count > 1 ? 'latest ' : ''}${esc(x.created || '')}</div><div class="meta warn">${esc(x.reason)}</div></div>
+      <button data-trace="${esc(x.id)}">Trace</button></div>`).join('')
+        : `<div class="hint">No failed or stuck agent runs, and no failed or rejected LLM calls, in the last ${days} days.${ev.recentPlans?.length ? ' The latest runs are listed below.' : ''}</div>`}</section>`);
+  }
+
   if (ev.recentPlans?.length) {
-    out.push(`<section class="card"><h2>Execution plans</h2>${ev.recentPlans.slice(0, 15).map(p => `
+    out.push(`<section class="card"><h2>${ev.recentFailures ? 'Latest runs' : 'Execution plans'}</h2>${ev.recentPlans.slice(0, 15).map(p => `
       <div class="list-item"><div><div>${esc(p.display)}</div><div class="meta">${esc(p.state || '')} · ${esc(p.created || '')}</div></div>
       <button data-trace="${esc(p.id)}">Trace</button></div>`).join('')}</section>`);
   }
@@ -344,7 +355,21 @@ function findingsHtml(findings) {
       <div class="ft"><span class="sev ${f.severity}">${f.severity}</span>${esc(f.title)}</div>
       ${f.detail ? `<div class="fd">${esc(f.detail)}</div>` : ''}
       ${f.fix ? `<div class="fx"><b>Fix:</b> ${esc(f.fix)}</div>` : ''}
+      ${evidenceLinks(f)}
       <div class="rid">${esc(f.id)} · ${esc(f.category)}</div></div>`).join('');
+}
+
+// Chips that open the records a finding was raised from (same data-open handler as the timeline).
+const EV_LABEL = { ...KIND_LABEL, skill: 'Skill', acl: 'ACL', syslog: 'System log', http: 'HTTP call', flow: 'Flow', rca: 'Caller access', trigger: 'Trigger' };
+function evidenceLinks(f) {
+  const refs = (f.evidence || []).map(e => ({ id: e.id, table: evidenceTable(last?.ev, e.table), label: e.label || EV_LABEL[e.table] || 'Record' })).filter(e => e.table && e.id);
+  if (!refs.length) return '';
+  const total = refs.reduce((m, e) => ((m[e.label] = (m[e.label] || 0) + 1), m), {});
+  const seen = {};
+  return `<div class="ev-links">${refs.slice(0, 6).map(e => {
+    const n = (seen[e.label] = (seen[e.label] || 0) + 1);
+    return `<a href="#" data-open="${esc(e.table)}|${esc(e.id)}" title="Open ${esc(e.table)} record">${esc(e.label)}${total[e.label] > 1 ? ' ' + n : ''} ↗</a>`;
+  }).join('')}</div>`;
 }
 
 const val = (row, f) => { const x = row?.[f]; return x && typeof x === 'object' && 'display_value' in x ? (x.display_value || x.value) : x; };
@@ -409,7 +434,7 @@ $('btnPage').addEventListener('click', async () => {
   $('q').value = p.sysId;
   run(col => col.trace(tab.url));
 });
-$('btnRecent').addEventListener('click', () => run(col => col.recentRuns(20)));
+$('btnRecent').addEventListener('click', () => run(col => col.recentFailures({ days: 7 })));
 $('btnSettings').addEventListener('click', () => $('settings').classList.toggle('hidden'));
 for (const id of ['setWindow', 'setRows', 'setStuck', 'setRedact', 'setBodies', 'setActions', 'setKey', 'setModel', 'setClaudeBodies', 'setAsk']) $(id).addEventListener('change', saveSettings);
 $('btnCopy').addEventListener('click', copyReport);
