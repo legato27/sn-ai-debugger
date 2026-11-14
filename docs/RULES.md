@@ -6,6 +6,8 @@ The rule ID shows under each finding in the panel. Rules live in [`lib/rules.js`
 
 **Evidence links.** Each finding shows chips for the records it was raised from (tool execution, Gen AI log entry, ACL, system log row…). Click one to open the record; the Markdown report lists the root cause's records.
 
+**Only the run's own logs count.** Logs are collected by time window, so they include every job and user on the instance. A log line or flow counts for SYSLOG-ACL, SYSLOG-RUN, FLOW-ERR and FLOW-WAIT only when it names a record of the run (in the message, or `context_map.record_sys_id` / `_script_record`) or was written in the session of one of the run's users (`sys_created_by` / `context_map._user`, not `system`). The rest is grouped in the panel's **Background** card.
+
 **Skill rules report per skill.** The SKILL-* grounding rules check every LLM call in the trace that did not error, but report once per skill with a count ("1 of 4 LLM calls"), not once per call.
 
 | Rule ID | Severity | Fires when | First fix |
@@ -28,6 +30,9 @@ The rule ID shows under each finding in the panel. Rules live in [`lib/rules.js`
 | PLAN-NOTASKS | High | No execution tasks were created | Check the agent's active flag, ACL and description |
 | GENAI-EMPTY | High | LLM returned a blank response with no error | Check AI Guardian and grounding fields |
 | GUARD | High | AI Guardian flagged or blocked a call | Review the input and the guardrail mode |
+| SKILL-NO-INPUT | High | A short LLM reply asks for input instead of answering ("Kindly check if attachments are present", "No documents were provided"). The detail shows the run's own errors in the 10 s before and how many of the skill's last 20 calls gave the same reply | Fix what the skill reads: the record's fields or attachment, the skill's inputs and tools. An `FDIH` error just before means a flow or action tool failed |
+| SKILL-NO-ANSWER | High (Medium when the skill gives this reply on every call) | A short LLM reply only acknowledges the instructions or refuses ("Understood. I will respond only in English.") | Fix the skill it calls first if that one had no input; otherwise the data part of the prompt is empty |
+| SYSLOG-RUN | High | Errors in the system log that name a record of the run or come from its users' sessions (any source, including Group Action Framework `sn-gaf`) | Read them with the timeline; the first one is usually the cause |
 | SKILL-PLACEHOLDER | High | The final prompt of an LLM call that did not error still contains template variables such as `{{incident.short_description}}` | Fix the skill input or tool that supplies the variable (names are matched exactly); compare with the Skill Kit test's Grounded prompt tab |
 | SKILL-TRUNCATED | High | The response used the prompt config's max tokens, or the output metadata says the model stopped for length | Raise max tokens in the skill prompt configuration, or ask for a shorter output |
 | HTTP-ERR | High | Outbound HTTP calls failed during the run | Check credentials, endpoint, MID Server |
@@ -51,7 +56,6 @@ The rule ID shows under each finding in the panel. Rules live in [`lib/rules.js`
 | VA-REASK | Medium | Virtual Agent sent the same message 3+ times | Make the topic or agent use the answer it has; add a fallback after two tries |
 | TOOL-SLOW | Medium | A tool took more than 30 seconds | Progress message, async, or a narrower query |
 | FLOW-WAIT | Medium | A subflow behind one of the run's tools is waiting | Return an interim result or notify on completion |
-| SYSLOG-AI | Medium | AI framework errors in the system log, including Group Action Framework (`sn-gaf`), written by the run's own users | Read them against the plan timeline |
 | SKILL-EMPTY-GROUNDING | Medium | A labelled grounding field in the final prompt holds a no-data value (`null`, `[]`, `N/A`…), or is blank at the end of the prompt or just before such a field. Section headers, output templates and instruction headers are not reported | Check the record's field, the skill input mapping and the tool behind that section |
 | GENAI-NONE | Medium | No Gen AI log rows were found | Widen the window or use an HR admin |
 | KILLSWITCH-OFF | Low | `kill_switch.mode` is `off` | Set it to `warn_only` (default) or `enforce` |

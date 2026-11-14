@@ -46,7 +46,8 @@ export const SCHEMA = {
   sys_generative_ai_config: { super: 'sys_metadata', fields: { name: 'string', max_tokens: 'integer' } },
   sys_generative_ai_prompt_config: { super: 'sys_metadata', fields: { ai_config: ['reference', 'sys_generative_ai_config'], order: 'integer' } },
   sys_generative_ai_log: { super: 'sys_metadata', fields: { skill_config_id: ['reference', 'x_mock_ai_skill'], prompt_config_id: ['reference', 'sys_generative_ai_prompt_config'], prompt: 'string', response: 'string', status: 'string', error: 'string', error_code: 'string', source: 'string', model_name: 'string', prompt_token_count: 'integer', response_token_count: 'integer', output_metadata: 'string', feedback: 'string', metadata_table: 'string', metadata_document: 'string' } },
-  syslog: { super: 'sys_metadata', fields: { level: 'string', source: 'string', message: 'string' } },
+  // context_map is JSON: the session user, scope and the record or script being run. [V] live instance
+  syslog: { super: 'sys_metadata', fields: { level: 'string', source: 'string', message: 'string', context_map: 'string' } },
   sys_outbound_http_log: { super: 'sys_metadata', fields: { url: 'string', response_status: 'integer' } },
   sys_flow_context: { super: 'sys_metadata', fields: { name: 'string', state: 'string' } },
   sys_restricted_caller_access: { super: 'sys_metadata', fields: { source_scope: 'string', target_scope: 'string', status: 'string' } },
@@ -128,19 +129,29 @@ export function seed() {
     { ...meta(IDS.log7, '2026-10-28 08:45:00'), skill_config_id: '', prompt: 'x', response: '', status: 'failed', error: 'HTTP request cancelled', error_code: '200000', source: 'AIAgent' },
     // Summarize, then Refine, on the evidence record (prompt stored as a JSON messages array, as live);
     // the wrapper's inner skill call is logged without the record, by the same user at the same moment.
-    { ...meta(IDS.log8, '2026-10-28 07:00:00', '2026-10-28 07:00:00', 'alex.admin'), skill_config_id: IDS.skillW, metadata_table: 'x_mock_evidence', metadata_document: IDS.evid, source: 'WWNA: Default', status: 'success', error: '', model_name: 'gpt_large', prompt: JSON.stringify([{ role: 'user', content: 'Evidence title: Badge access logs\nEvidence text: null\nSummarise the evidence for the investigator.' }]), response: 'The evidence has no text to summarise.' },
-    { ...meta(IDS.log9, '2026-10-28 07:05:00', '2026-10-28 07:05:00', 'alex.admin'), skill_config_id: IDS.skillW, metadata_table: 'x_mock_evidence', metadata_document: IDS.evid, source: 'WWNA: Refine', status: 'success', error: '', model_name: 'gpt_large', prompt: 'Refine: shorter', response: 'No text.' },
-    { ...meta(IDS.log10, '2026-10-28 07:05:00', '2026-10-28 07:05:00', 'alex.admin'), skill_config_id: IDS.skillI, metadata_table: '', metadata_document: '', source: '', status: 'success', error: '', prompt: 'inner', response: 'No text.' },
+    { ...meta(IDS.log8, '2026-10-28 07:00:00', '2026-10-28 07:00:00', 'alex.admin'), skill_config_id: IDS.skillW, metadata_table: 'x_mock_evidence', metadata_document: IDS.evid, source: 'WWNA: Default', status: 'success', error: '', model_name: 'gpt_large', prompt: JSON.stringify([{ role: 'user', content: 'Evidence title: Badge access logs\nEvidence text: null\nSummarise the evidence for the investigator.' }]), response: 'Understood. I will respond only in English.' },
+    // Earlier wrapper calls on other records: the same reply every time
+    ...[0, 1, 2].map(i => ({ ...meta(id(191 + i), `2026-10-27 1${i}:00:00`, `2026-10-27 1${i}:00:00`, 'alex.admin'), skill_config_id: IDS.skillW, metadata_table: 'x_mock_evidence', metadata_document: id(195), source: 'WWNA: Default', status: 'success', error: '', prompt: 'x', response: 'Understood. I will respond only in English.' })),
+    { ...meta(IDS.log9, '2026-10-28 07:05:00', '2026-10-28 07:05:00', 'alex.admin'), skill_config_id: IDS.skillW, metadata_table: 'x_mock_evidence', metadata_document: IDS.evid, source: 'WWNA: Refine', status: 'success', error: '', model_name: 'gpt_large', prompt: 'Refine: shorter', response: 'Understood. I will respond only in English.' },
+    { ...meta(IDS.log10, '2026-10-28 07:05:00', '2026-10-28 07:05:00', 'alex.admin'), skill_config_id: IDS.skillI, metadata_table: '', metadata_document: '', source: '', status: 'success', error: '', prompt: 'inner', response: 'Kindly check if attachments are present. Make sure that the uploaded documents are in formats: PNG, JPG, JPEG, PDF or DOCX only.' },
     { ...meta(IDS.log11, '2026-10-28 07:05:05', '2026-10-28 07:05:05', 'someone.else'), skill_config_id: IDS.skillI, metadata_table: '', metadata_document: '', source: '', status: 'success', error: '', prompt: 'other user', response: 'x' },
     { ...meta(IDS.log12, '2026-10-28 07:05:08', '2026-10-28 07:05:08', 'alex.admin'), skill_config_id: IDS.skillI, metadata_table: 'x_mock_case', metadata_document: id(190), source: 'WWNA: Default', status: 'success', error: '', prompt: 'other record', response: 'x' },
     { ...meta(IDS.log5, '2026-10-28 08:30:00'), skill_config_id: IDS.skill, prompt: 'Summarise the knowledge article for a service desk agent.\nTitle: VPN setup for contractors\nDescription:\nResolution notes: []\nFollow these rules:\n- Use plain language\n- Keep it under 80 words', response: 'This article covers VPN setup.', status: 'success', error: '', source: 'NowAssistSkill', model_name: 'claude_small', feedback: 'Rejected' },
   ]);
+  // As live: a session's lines carry its user in sys_created_by and context_map._user; background
+  // jobs log as "system". The run's lines are written in the agent's run-as session (travel.ai.user).
+  const ctx = (user, extra = {}) => JSON.stringify({ _user: user, _logged_in_user: user, _scope: 'global', ...extra });
+  const agentLog = (k, t, level, source, message, extra) => ({ ...meta(IDS[k], t, t, 'travel.ai.user'), level, source, message, context_map: ctx('travel.ai.user', extra) });
   put('syslog', [
-    { ...meta(IDS.sys1, '2026-10-29 02:00:57'), level: '2', source: 'x_demo_travel', message: 'Evaluation error in TravelPolicyUtil: Cannot read property "getValue" of null' },
-    { ...meta(IDS.sys2, '2026-10-29 02:00:11'), level: '1', source: 'sn_aia', message: 'Security restricted: Read operation on table x_demo_travel_profile denied for user travel.ai.user' },
-    { ...meta(IDS.sys3, '2026-10-29 05:00:00'), level: '2', source: 'other', message: 'outside window' },
-    { ...meta(IDS.sys4, '2026-10-29 02:00:45'), level: '2', source: 'sn-gaf', message: 'Group action failed: no records matched the action condition' },
-    { ...meta(IDS.sys5, '2026-10-29 02:00:50', '2026-10-29 02:00:50', 'someone.else'), level: '1', source: 'hr', message: 'Security restricted: Read operation on table sn_hr_core_case denied for user someone.else' },
+    agentLog('sys1', '2026-10-29 02:00:57', '2', 'x_demo_travel', 'Evaluation error in TravelPolicyUtil: Cannot read property "getValue" of null', { _script_record: IDS.si2 }),
+    agentLog('sys2', '2026-10-29 02:00:11', '1', 'sn_aia', 'Security restricted: Read operation on table x_demo_travel_profile denied for user travel.ai.user'),
+    { ...meta(IDS.sys3, '2026-10-29 05:00:00'), level: '2', source: 'other', message: 'outside window', context_map: ctx('system') },
+    agentLog('sys4', '2026-10-29 02:00:45', '2', 'sn-gaf', 'Group action failed: no records matched the action condition'),
+    { ...meta(IDS.sys5, '2026-10-29 02:00:50', '2026-10-29 02:00:50', 'someone.else'), level: '1', source: 'hr', message: 'Security restricted: Read operation on table sn_hr_core_case denied for user someone.else', context_map: ctx('someone.else') },
+    { ...meta(id(204), '2026-10-28 07:04:57', '2026-10-28 07:04:57', 'alex.admin'), level: '2', source: 'com.glide.ui.ServletErrorListener', message: `Error while executing sync feature FDIH call. Feature_name : ${id(205)}, service plan invocation id : ${id(206)}`, context_map: ctx('alex.admin') },
+    // Background noise in the same minutes, from scheduled jobs
+    ...[0, 1, 2].map(i => ({ ...meta(id(200 + i), `2026-10-29 02:00:${20 + i * 10}`), level: '2', source: 'Impact Tree Builder Job', message: `Exception at executeImpactTreeBuilder: For input string: "${i}" java.lang.NumberFormatException`, context_map: ctx('system', { job_name: 'Impact Tree Builder' }) })),
+    { ...meta(id(203), '2026-10-29 02:00:35'), level: '2', source: 'com.glide.ui.ServletErrorListener', message: 'Evaluator.evaluateString() problem: java.lang.SecurityException: Unsupported call to GlideEncrypter', context_map: ctx('system') },
   ]);
   put('sys_outbound_http_log', [{ ...meta(IDS.http1, '2026-10-29 02:00:40'), url: 'https://api.example.com/policy?country=XX', response_status: '503' }]);
   put('sys_flow_context', [

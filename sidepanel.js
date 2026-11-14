@@ -163,12 +163,21 @@ function render(ev, rca) {
     const conv = ev.norm?.conversation;
     out.push(`<section class="card"><h2>Conversation timeline (${tl.length})</h2>
       ${conv ? `<div class="hint">VA conversation · ${esc(conv.deviceType || '')} ${esc(conv.state || '')}</div>` : `<div class="hint">No Virtual Agent transcript linked; showing agent messages, tool and LLM calls.</div>`}
+      ${ev.background?.total && !tl.some(e => e.kind === 'error') ? `<div class="hint">No system log error came from this run. ${ev.background.total} errors from other jobs and users in the same minutes are under Background.</div>` : ''}
       <div class="timeline">${tl.slice(0, 300).map(e => `<div class="tl ${esc(e.kind)}">
         <div class="tl-h"><span class="tl-t">${esc(String(e.t).slice(11))}</span><span class="tl-k">${esc(TL_LABEL[e.kind] || e.kind)}</span>
           ${e.ref?.id ? `<a href="#" data-open="${esc(e.ref.table)}|${esc(e.ref.id)}">${esc(e.who)}</a>` : esc(e.who)}
-          ${e.state ? `<span class="tl-s">${esc(e.state)}</span>` : ''}${e.durationMs ? `<span class="tl-s">${(e.durationMs / 1000).toFixed(1)} s</span>` : ''}</div>
+          ${e.count > 1 ? `<span class="badge" title="The same error ${e.count} times in this run">×${e.count}</span>` : ''}${e.state ? `<span class="tl-s">${esc(e.state)}</span>` : ''}${e.durationMs ? `<span class="tl-s">${(e.durationMs / 1000).toFixed(1)} s</span>` : ''}</div>
         ${e.content ? (String(e.content).length > 400 ? `<details><summary class="tl-c">${esc(String(e.content).slice(0, 400))}…</summary><div class="tl-c">${esc(e.content)}</div></details>` : `<div class="tl-c">${esc(e.content)}</div>`) : ''}
         ${e.error ? `<div class="tl-e">${esc(e.error)}</div>` : ''}</div>`).join('')}</div></section>`);
+  }
+
+  const bg = ev.background;
+  if (bg && (bg.total || bg.flows)) {
+    out.push(`<section class="card background"><details><summary>Background: ${bg.total} error${bg.total === 1 ? '' : 's'}${bg.flows ? ` and ${bg.flows} failed or waiting flows` : ''} not from this run <span class="count">${bg.groups.length} kinds</span></summary>
+      <div class="hint">Logged in the same minutes by other jobs and users. None names a record of this run or comes from its users' sessions, so they are left out of the findings and the timeline.</div>
+      ${bg.groups.slice(0, 15).map(g => `<div class="bg-row"><span class="badge">×${g.count}</span> <a href="#" data-open="syslog|${esc(g.id)}">${esc(g.source)}</a> <span class="tl-c">${esc(g.text)}</span></div>`).join('')}
+      ${bg.groups.length > 15 ? `<div class="hint">…and ${bg.groups.length - 15} more kinds.</div>` : ''}</details></section>`);
   }
 
   if (ev.root) out.push('<section class="card claude" id="claudeCard"></section>');

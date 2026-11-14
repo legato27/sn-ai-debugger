@@ -5,10 +5,11 @@ import assert from 'node:assert/strict';
 import { startMock, IDS } from './mock-instance.mjs';
 import { makeHttpClient } from '../lib/sn-client.js';
 import { Collector } from '../lib/collectors.js';
-import { runRules, unfilledPlaceholders, findEmptyGrounding } from '../lib/rules.js';
+import { runRules, unfilledPlaceholders, findEmptyGrounding, nonAnswer } from '../lib/rules.js';
 import { docTargets, parseSnUrl } from '../lib/collectors.js';
 import { toMarkdown, evidenceTable } from '../lib/report.js';
-import { redactEvidence } from '../lib/redact.js';
+import { redactEvidence, redactText } from '../lib/redact.js';
+import { compactEvidence } from '../lib/claude.js';
 
 let mock, client;
 const NOW = '2026-10-29T06:00:00Z';
@@ -54,11 +55,13 @@ test('quick mode is not reported for a plan with no skill involved', async () =>
   assert.equal(byId(runRules(ev, { now: NOW }), 'SKILL-QUICKMODE').length, 0);
 });
 
-test('Group Action Framework (sn-gaf) errors count as AI platform errors', async () => {
+test('errors from the run\'s own session are findings (SYSLOG-RUN); background jobs are not', async () => {
   const ev = await new Collector(client()).trace(IDS.plan);
-  const ai = byId(runRules(ev, { now: NOW }), 'SYSLOG-AI')[0];
-  assert.ok(ai, 'SYSLOG-AI should fire');
-  assert.match(ai.detail, /\[sn-gaf\] Group action failed/);
+  const run = byId(runRules(ev, { now: NOW }), 'SYSLOG-RUN')[0];
+  assert.ok(run, 'SYSLOG-RUN should fire');
+  assert.match(run.title, /^1 error in the system log came from this run/);
+  assert.match(run.detail, /\[sn-gaf\] Group action failed[\s\S]*Linked by the run's user session/);
+  assert.doesNotMatch(run.detail, /Impact Tree Builder|GlideEncrypter/);
 });
 
 test('unfilledPlaceholders finds template variables left in the final prompt', () => {
@@ -221,6 +224,81 @@ test('a record with no Otto activity says so', async () => {
   assert.deepEqual(ev.recordActivity.map(x => x.id), [IDS.casePlan], 'only the agent run on the case');
   const none = await new Collector(client()).trace(`https://x.service-now.com/sys_user.do?sys_id=${IDS.runAs}`);
   assert.ok(none.warnings.some(w => /No Otto skill calls or agent runs are linked to this sys_user record/.test(w)));
+});
+
+// ---- answers that skip the task, and noise from the time window (from a live report) ----
+test('nonAnswer: replies that ask for input or only acknowledge, not real answers', () => {
+  assert.equal(nonAnswer('Kindly check if attachments are present. Make sure that the uploaded documents are in formats: PNG, JPG, JPEG, PDF or DOCX only.'), 'input');
+  assert.equal(nonAnswer('No attachments were found on this case.'), 'input');
+  assert.equal(nonAnswer('I could not find any documents attached to this record.'), 'input');
+  assert.equal(nonAnswer('Understood. I will respond only in English.'), 'ack');
+  assert.equal(nonAnswer('Sure.'), 'ack');
+  assert.equal(nonAnswer("I'm sorry, but I can't help with that request."), 'ack');
+  // real answers
+  assert.equal(nonAnswer('Please check that the VPN client is installed, then restart it.'), null, 'advice to the user is an answer');
+  assert.equal(nonAnswer('No issues were found in the evidence; the badge logs match the shift roster.'), null);
+  assert.equal(nonAnswer('Sure, here is the summary: the VPN drops every hour after the 2.3 update.'), null);
+  assert.equal(nonAnswer('Summary: ' + 'The investigator reviewed the badge logs. '.repeat(12) + 'Please provide the missing details.'), null, 'long answers are not checked');
+  assert.equal(nonAnswer(''), null);
+  // things a skill reports on are not missing input (live false positive)
+  assert.equal(nonAnswer('*Employee History Summary*\n\nThere are no employee case records available for this employee.'), null);
+  assert.equal(nonAnswer('No evidence of wrongdoing was found in the badge logs.'), null);
+  assert.equal(nonAnswer('Please provide the record number so I can look it up.'), 'input', 'asking the user for a record is still a non-answer');
+});
+
+test('Gen AI log trace of a nested call: the missing input is the root cause, the wrapper reply follows from it', async () => {
+  const ev = await new Collector(client()).trace(IDS.log10);
+  assert.equal(ev.root.kind, 'genaiLog');
+  assert.deepEqual(ev.norm.genaiLogs.map(g => g.id).sort(), [IDS.log10, IDS.log9].sort(), 'the wrapper call at the same moment; not another user\'s call 5 s later, nor the same user\'s call on another record 8 s later');
+  const rca = runRules(ev, { now: NOW });
+  assert.equal(rca.rootCause.id, 'SKILL-NO-INPUT');
+  assert.match(rca.rootCause.title, /input was missing for "Evidence Summarizer"/);
+  assert.match(rca.rootCause.detail, /Kindly check if attachments are present/);
+  // the session's error seconds before, and how often the skill does this
+  assert.match(rca.rootCause.detail, /Just before it, the same session logged: "Error while executing sync feature FDIH call[^"]*" \(07:04:57\)/);
+  assert.match(rca.rootCause.detail, /Of the skill's last 3 successful calls, 1 gave this same reply, so it depends on the record or the moment/);
+  assert.match(rca.rootCause.fix, /^An "FDIH" error means a flow, subflow or action that the skill runs as a tool failed/);
+  assert.ok(rca.rootCause.evidence.some(e => e.table === 'syslog'), 'links the preceding error');
+  // the wrapper gives this reply on every call: how it is built, not this call's failure
+  const ack = byId(rca, 'SKILL-NO-ANSWER')[0];
+  assert.equal(ack.severity, 'Medium');
+  assert.match(ack.title, /own reply is never an answer for "Evidence Summarizer Wrapper"/);
+  assert.match(ack.detail, /All of its last 5 calls gave this same reply[\s\S]*"Evidence Summarizer" said its input was missing/);
+  assert.match(ack.fix, /For this run, fix the missing input of "Evidence Summarizer"/);
+  assert.match(byId(rca, 'SYSLOG-RUN')[0].fix, /FDIH/);
+});
+
+test('background errors: left out of the timeline and findings, grouped in a summary and the report', async () => {
+  const ev = await new Collector(client()).trace(IDS.plan);
+  const errs = ev.timeline.filter(e => e.kind === 'error');
+  assert.ok(!errs.some(e => /Impact Tree Builder|ServletErrorListener/.test(e.who)), 'no background job in the timeline');
+  assert.ok(errs.some(e => e.who === 'sn-gaf'), "the run's own error stays");
+  assert.equal(ev.background.total, 4);
+  assert.deepEqual(ev.background.groups.map(g => [g.source, g.count]), [['Impact Tree Builder Job', 3], ['com.glide.ui.ServletErrorListener', 1]], 'same message with different numbers is one group');
+  const rca = runRules(ev, { now: NOW });
+  assert.ok(!rca.findings.some(f => /Impact Tree Builder|GlideEncrypter/.test(f.detail || '')));
+  const md = toMarkdown(redactEvidence(ev), rca);
+  assert.match(md, /## Background \(not from this run\)\n4 errors/);
+  assert.match(md, /- ×3 Impact Tree Builder Job/);
+  const sent = compactEvidence(ev, rca).data;
+  assert.ok(sent.syslog.every(x => x.linkedBy), 'Claude gets only the run\'s lines');
+  assert.equal(sent.backgroundErrors.total, 4);
+});
+
+test('the same error repeated in a run is one timeline entry with a count', async () => {
+  const ev = await new Collector(client()).trace(IDS.plan);
+  ev.norm.syslog.push({ ...ev.norm.syslog.find(x => x.id === IDS.sys4), id: 'f'.repeat(32), created: '2026-10-29 02:00:59' });
+  const { buildTimeline } = await import('../lib/timeline.js');
+  const tl = buildTimeline(ev.norm, {});
+  const gaf = tl.filter(e => e.who === 'sn-gaf');
+  assert.equal(gaf.length, 1);
+  assert.equal(gaf[0].count, 2);
+});
+
+test('redaction keeps KB and record numbers, still masks phone numbers', () => {
+  assert.equal(redactText('refer KB0012345 for alternatives'), 'refer KB0012345 for alternatives');
+  assert.equal(redactText('INC0010001 updated'), 'INC0010001 updated');
+  assert.equal(redactText('call +65 6123 4567 now'), 'call [PHONE] now');
 });
 
 function id140() { return (140).toString(16).padStart(32, '0'); }

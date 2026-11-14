@@ -102,3 +102,6 @@ select { font: inherit; color: var(--text); background: var(--bg); border: 1px s
 .tl-e { color: var(--crit); white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 2px; font-size: 12px; }
 .actions { border-left: 4px solid var(--high); }
 .actions .consent pre { max-height: 220px; }
+.background summary { font-weight: 600; }
+.bg-row { padding: 4px 0; border-top: 1px solid var(--border); font-size: 12px; overflow-wrap: anywhere; }
+.bg-row .tl-c { color: var(--muted); }

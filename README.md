@@ -1,6 +1,6 @@
 # SN AI Debugger
 
-A Chrome side panel that finds out why a ServiceNow AI Agent run, agentic workflow, tool or Now Assist skill failed. You give it a record (or open one); it reads the configuration and logs around it through your own logged-in session, runs 51 deterministic rules, and shows the most likely root cause with a suggested fix.
+A Chrome side panel that finds out why a ServiceNow AI Agent run, agentic workflow, tool or Now Assist skill failed. You give it a record (or open one); it reads the configuration and logs around it through your own logged-in session, runs 53 deterministic rules, and shows the most likely root cause with a suggested fix.
 
 ![Side panel showing the most likely root cause and findings](docs/images/panel-root-cause.png)
 
@@ -12,7 +12,8 @@ A Chrome side panel that finds out why a ServiceNow AI Agent run, agentic workfl
 - **Starts from anything.** A plan, task, tool execution, agent, workflow, tool, skill, prompt, Gen AI log entry, Virtual Agent conversation, a record URL, a name, or the record open in the current tab.
 - **Shows what Otto did on a record.** On an incident, HR case or evidence record (workspace sub-records included), it lists every skill call made on it, such as Summarize and Refine, the nested calls a wrapper skill makes, and the agent runs about it.
 - **Finds the failures for you.** **Recent failures** lists failed or stuck agent runs and failed or user-rejected skill calls from the last 7 days, each with its reason, including runs the platform terminated for Security Violation or Execution Failed. Repeats are merged with a count.
-- **Ranks root causes.** 51 rules (tool input casing mismatches, empty tool results, ACL role gaps, broken script includes, supervised tools on unattended runs, LLM errors, unfilled prompt variables, answers cut off at the token limit, stuck plans, overlapping agent descriptions, re-ask loops and more). A failed plan is treated as a symptom: the rule closest to the cause wins. Every finding links to the records it was raised from.
+- **Ranks root causes.** 53 rules (tool input casing mismatches, empty tool results, ACL role gaps, broken script includes, supervised tools on unattended runs, LLM errors, unfilled prompt variables, answers cut off at the token limit, skill replies that ask for missing input instead of answering, stuck plans, overlapping agent descriptions, re-ask loops and more). A failed plan is treated as a symptom: the rule closest to the cause wins. Every finding links to the records it was raised from.
+- **Separates the run from the noise.** Logs are matched by time, and a busy instance logs hundreds of errors a minute. Only lines that name a record of the run or come from its users' sessions count; the rest are grouped in a collapsed **Background** card.
 - **Release-aware (Brazil ready).** Reads the instance release and patch, checks the deny-by-default ACLs Brazil introduced for agents, workflows, skills, flows and flow actions, and spots runaway triggers and Kill Switch disables.
 - **Shows the conversation as the user lived it.** One timeline merges the Virtual Agent transcript, agent messages, tasks, tool calls, LLM calls and errors.
 - **Optional Claude analysis.** With your own Anthropic API key, sends a redacted summary to Claude for a written root cause, causal chain, fix and verification steps, with follow-up questions.
@@ -70,12 +71,12 @@ See [SECURITY.md](SECURITY.md) for details and how to report a problem.
 
 ## Status
 
-Version 0.5.0. Tested against a mock ServiceNow instance, a mock Messages API and an in-memory Glide runtime (55 Node tests plus a Chromium end-to-end run). Checked read-only against one live instance (Australia patch 7): the table names the extension probes at run time all exist there (see [Architecture](docs/ARCHITECTURE.md#table-names)). Other releases may differ; issues and pull requests with real-instance findings are welcome.
+Version 0.5.0. Tested against a mock ServiceNow instance, a mock Messages API and an in-memory Glide runtime (60 Node tests plus a Chromium end-to-end run). Checked read-only against one live instance (Australia patch 7): the table names the extension probes at run time all exist there (see [Architecture](docs/ARCHITECTURE.md#table-names)). Other releases may differ; issues and pull requests with real-instance findings are welcome.
 
 ## Development
 
 ```bash
-npm test          # 55 Node tests: collectors, rules, skills, redaction, timeline, Claude client, stop scripts
+npm test          # 60 Node tests: collectors, rules, skills, redaction, timeline, Claude client, stop scripts
 ```
 
 End-to-end test (loads the extension in Chromium against a local mock instance; needs Playwright):

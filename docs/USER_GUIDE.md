@@ -110,7 +110,9 @@ The **Conversation timeline** card puts the whole run in time order, so you can 
 | Task | Grey | Each execution task and its state |
 | Tool call | Grey | Tool name, input, output, state and duration |
 | LLM call | Grey | Skill or source, the model's response and state |
-| Error | Red | Error-level system log lines and failed flows during the run |
+| Error | Red | Error-level system log lines and failed flows from this run: they name one of its records or come from its users' sessions. The same error repeated shows once with a count (×N) |
+
+Errors from other jobs and users in the same minutes are left out of the timeline and the findings. The collapsed **Background** card below it groups them by source and message with a count, so you can still see them. On a busy instance that is hundreds of lines a minute.
 
 Click a name to open that record in a new tab. Long text folds; click it to expand. If the plan has no linked conversation (a triggered run, or a test in AI Agent Studio), the card says so and shows the rest of the run. To start from the conversation instead, paste its sys_id: the trace reads the transcript and then the latest plan in it.
 
@@ -237,12 +239,14 @@ Each playbook names the symptom, where to start, and which findings to look for.
 
 The call succeeded, so nothing errors. The problem is usually what went into the prompt, or how much room the answer had.
 
-1. Trace the skill (or pick the rejected call from **Recent failures**).
-2. **SKILL-PLACEHOLDER** means template variables such as `{{incident.short_description}}` reached the model unfilled. Fix the skill input or tool name; they are matched exactly.
-3. **SKILL-EMPTY-GROUNDING** means a labelled section of the prompt arrived empty. Check the record and the tool behind that section.
-4. **SKILL-TRUNCATED** means the answer hit the prompt config's max tokens. Raise the limit or ask for a shorter output.
-5. If the skill uses a flow tool and **SKILL-QUICKMODE** shows, flow failures are invisible until you turn quick mode off.
-6. Confirm the fix with a Skill Kit test on the same record and read its Grounded prompt tab.
+1. Trace the skill (or pick the rejected call from **Recent failures**, or use **Use this page** on the record).
+2. **SKILL-NO-INPUT** means the model replied with a request for input ("Kindly check if attachments are present") instead of an answer. The finding shows the errors the same session logged just before it and how often the skill does this. An `FDIH` error there means a flow or action the skill runs as a tool failed.
+3. **SKILL-NO-ANSWER** means the reply only acknowledged the instructions ("Understood. I will respond only in English."). When a wrapper skill does this on every call, it is Medium and points at the skill it calls.
+4. **SKILL-PLACEHOLDER** means template variables such as `{{incident.short_description}}` reached the model unfilled. Fix the skill input or tool name; they are matched exactly.
+5. **SKILL-EMPTY-GROUNDING** means a labelled section of the prompt arrived empty. Check the record and the tool behind that section.
+6. **SKILL-TRUNCATED** means the answer hit the prompt config's max tokens. Raise the limit or ask for a shorter output.
+7. If the skill uses a flow tool and **SKILL-QUICKMODE** shows, flow failures are invisible until you turn quick mode off.
+8. Confirm the fix with a Skill Kit test on the same record and read its Grounded prompt tab.
 
 ### The orchestrator picks the wrong agent, or none
 
@@ -316,7 +320,7 @@ The report also includes the first 60 timeline entries with time, event, who, an
 
 ## Rules reference
 
-The rule ID shows under each finding. The most common rules are below; the full list of 51 is in the [Rules reference](RULES.md).
+The rule ID shows under each finding. The most common rules are below; the full list of 53 is in the [Rules reference](RULES.md).
 
 | Rule ID | Severity | Fires when | First fix |
 | --- | --- | --- | --- |
@@ -354,7 +358,7 @@ The rule ID shows under each finding. The most common rules are below; the full 
 | LOOP-MSG | Medium | Same message 3+ times | Pre-fill from context; add a completion condition |
 | TOOL-SLOW | Medium | A tool took more than 30 seconds | Progress message, async, or a narrower query |
 | FLOW-WAIT | Medium | A subflow is waiting | Return an interim result or notify on completion |
-| SYSLOG-AI | Medium | AI framework errors in the system log | Read them against the plan timeline |
+| SYSLOG-RUN | High | Errors in the system log from this run's records or users' sessions | Read them with the timeline |
 | GENAI-NONE | Medium | No Gen AI log rows were found | Widen the window or use an HR admin |
 | ADMIN | Info | You are tracing as admin | Reproduce as the run-as user |
 | DICT | Info | The data dictionary is not readable | Trace with a user who can read it |
@@ -363,6 +367,8 @@ Skill rules (unreleased):
 
 | Rule ID | Severity | Fires when | First fix |
 | --- | --- | --- | --- |
+| SKILL-NO-INPUT | High | The skill replied with a request for input instead of an answer | Fix what the skill reads; check the error just before it |
+| SKILL-NO-ANSWER | High / Medium | The reply only acknowledged the instructions | Fix the skill it calls first, or the empty data part of the prompt |
 | SKILL-PLACEHOLDER | High | Template variables such as `{{incident.short_description}}` remain in the final prompt | Fix the skill input or tool that supplies them |
 | SKILL-TRUNCATED | High | The answer hit the prompt config's max tokens | Raise the limit or ask for a shorter output |
 | SKILL-EMPTY-GROUNDING | Medium | A labelled grounding field arrived empty | Check the record field and the tool behind it |

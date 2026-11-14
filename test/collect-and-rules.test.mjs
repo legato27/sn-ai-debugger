@@ -43,8 +43,9 @@ test('trace an execution plan by sys_id: finds the real root cause', async () =>
   assert.equal(ev.norm.agents[0].tools.length, 2);
   assert.equal(ev.norm.agents[0].runAs.name, 'Travel AI User');
   assert.deepEqual(ev.norm.agents[0].acls[0].roles, ['x_demo_travel.reader']);
-  // Window filter excluded the 05:00 syslog row (4 = two run errors, the sn-gaf error, another user's denial)
-  assert.equal(ev.norm.syslog.length, 4);
+  // Window filter excluded the 05:00 row. 8 = 3 lines from the run's session, another user's denial, 4 background job errors
+  assert.equal(ev.norm.syslog.length, 8);
+  assert.deepEqual(ev.norm.syslog.filter(x => x.link).map(x => x.id).sort(), [IDS.sys1, IDS.sys2, IDS.sys4].sort());
   assert.ok(ev.user.isAdmin);
 
   const rca = runRules(ev, { now: NOW });
