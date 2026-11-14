@@ -15,6 +15,7 @@ export const IDS = {
   log3: id(53), log4: id(54), log5: id(55), pcfg: id(56), sys4: id(63), stuckPlan: id(150),
   secPlan: id(151), secTask: id(152), log6: id(57), log7: id(58), sys5: id(64), flowX: id(73),
   skillW: id(180), skillI: id(181), evid: id(182), erCase: id(183), log8: id(184), log9: id(185), log10: id(186), log11: id(187), log12: id(188), casePlan: id(189),
+  inf1: id(210), inf2: id(211), infBg: id(212),
 };
 
 // table -> { super, fields: { name: type | ['reference', target] | ['glide_list', target] } }
@@ -147,6 +148,10 @@ export function seed() {
     agentLog('sys2', '2026-10-29 02:00:11', '1', 'sn_aia', 'Security restricted: Read operation on table x_demo_travel_profile denied for user travel.ai.user'),
     { ...meta(IDS.sys3, '2026-10-29 05:00:00'), level: '2', source: 'other', message: 'outside window', context_map: ctx('system') },
     agentLog('sys4', '2026-10-29 02:00:45', '2', 'sn-gaf', 'Group action failed: no records matched the action condition'),
+    // Info and debug lines: the run's own (travel.ai.user) and a scheduled job's (not the run's)
+    agentLog('inf1', '2026-10-29 02:00:15', '0', 'x_demo_travel', 'TravelPolicyUtil: checking policy for country XX'),
+    agentLog('inf2', '2026-10-29 02:00:16', '-1', 'x_demo_travel', 'TravelPolicyUtil: profile lookup returned 0 rows\nquery: user=travel.ai.user'),
+    { ...meta(IDS.infBg, '2026-10-29 02:00:25'), level: '0', source: 'Impact Tree Builder Job', message: 'Processed 120 CIs', context_map: ctx('system', { job_name: 'Impact Tree Builder' }) },
     { ...meta(IDS.sys5, '2026-10-29 02:00:50', '2026-10-29 02:00:50', 'someone.else'), level: '1', source: 'hr', message: 'Security restricted: Read operation on table sn_hr_core_case denied for user someone.else', context_map: ctx('someone.else') },
     { ...meta(id(204), '2026-10-28 07:04:57', '2026-10-28 07:04:57', 'alex.admin'), level: '2', source: 'com.glide.ui.ServletErrorListener', message: `Error while executing sync feature FDIH call. Feature_name : ${id(205)}, service plan invocation id : ${id(206)}`, context_map: ctx('alex.admin') },
     // Background noise in the same minutes, from scheduled jobs
@@ -222,7 +227,7 @@ function parseQuery(q) {
 function parseCond(t) {
   let m;
   if ((m = t.match(/^([a-z_.]+)(ISNOTEMPTY|ISEMPTY)$/))) return { f: m[1], op: m[2] };
-  if ((m = t.match(/^([a-z_.]+)(IN|LIKE|STARTSWITH|>=|<=|!=|=|>|<)(.*)$/))) return { f: m[1], op: m[2], val: m[3] };
+  if ((m = t.match(/^([a-z_.]+)(NOT IN|IN|LIKE|STARTSWITH|>=|<=|!=|=|>|<)(.*)$/))) return { f: m[1], op: m[2], val: m[3] };
   return { f: '__bad', op: '=', val: t };
 }
 let DOT = null;   // set by startMock: resolves 'ref.field' against the data
@@ -233,6 +238,7 @@ function match(row, c) {
     case 'ISNOTEMPTY': return x !== '';
     case 'ISEMPTY': return x === '';
     case 'IN': return c.val.split(',').includes(x);
+    case 'NOT IN': return !c.val.split(',').includes(x);
     case 'LIKE': return x.toLowerCase().includes(c.val.toLowerCase());
     case 'STARTSWITH': return x.startsWith(c.val);
     case '>=': return x >= c.val; case '<=': return x <= c.val; case '>': return x > c.val; case '<': return x < c.val;
