@@ -6,7 +6,7 @@ import { startMock, IDS } from './mock-instance.mjs';
 import { makeHttpClient } from '../lib/sn-client.js';
 import { Collector } from '../lib/collectors.js';
 import { runRules, unfilledPlaceholders, findEmptyGrounding } from '../lib/rules.js';
-import { docTargets } from '../lib/collectors.js';
+import { docTargets, parseSnUrl } from '../lib/collectors.js';
 import { toMarkdown, evidenceTable } from '../lib/report.js';
 import { redactEvidence } from '../lib/redact.js';
 
@@ -181,6 +181,46 @@ test('docTargets follows document-ID pairs (target_document_table + target_docum
   assert.deepEqual(docTargets(row, 'sn_aia_agent'), [IDS.agent]);
   assert.deepEqual(docTargets(row, 'incident'), [IDS.plan]);
   assert.deepEqual(docTargets(row, 'sn_aia_usecase'), []);
+});
+
+// ---- business records: "I clicked Summarize on this record" ----
+const wsUrl = `https://x.service-now.com/now/hr/agent/record/x_mock_case/${IDS.erCase}/params/selected-tab-index/4/selected-tab/id%3Drelated_list%5Eindex%3D3/sub/record/x_mock_evidence/${IDS.evid}`;
+
+test('workspace sub-record URL: the record on screen is the last one, the parent is context', () => {
+  assert.deepEqual(parseSnUrl(wsUrl), { table: 'x_mock_evidence', sysId: IDS.evid, records: [{ table: 'x_mock_evidence', sysId: IDS.evid }, { table: 'x_mock_case', sysId: IDS.erCase }] });
+});
+
+test('record trace: Otto calls on the record, the nested skill call, and agent runs on the parent', async () => {
+  const ev = await new Collector(client()).trace(wsUrl);
+  assert.equal(ev.root.kind, 'record');
+  assert.equal(ev.root.label, 'Record (x_mock_evidence)');
+  const ids = ev.recordActivity.map(x => x.id);
+  assert.deepEqual(ids.slice().sort(), [IDS.log8, IDS.log9, IDS.log10, IDS.casePlan].sort(), 'other users and other records are left out');
+  assert.equal(ev.recordActivity.find(x => x.id === IDS.log10).nested, true);
+  assert.equal(ev.recordActivity.find(x => x.id === IDS.log9).detail, 'WWNA: Refine · gpt_large');
+  assert.equal(ev.recordActivity.find(x => x.id === IDS.casePlan).on, 'x_mock_case');
+  assert.deepEqual(ev.norm.skills.map(x => x.display).sort(), ['Evidence Summarizer', 'Evidence Summarizer Wrapper']);
+  assert.ok(ev.timeline.some(e => e.kind === 'llm' && /Evidence Summarizer Wrapper · WWNA: Refine/.test(e.who)));
+  const rca = runRules(ev, { now: NOW });
+  const empty = byId(rca, 'SKILL-EMPTY-GROUNDING')[0];
+  assert.ok(empty, 'the JSON-wrapped prompt is unwrapped and checked');
+  assert.match(empty.detail, /Evidence text/);
+  assert.match(toMarkdown(redactEvidence(ev), rca), /## Otto activity on this record/);
+});
+
+test('a bare sys_id of a business record resolves through the Gen AI log', async () => {
+  const ev = await new Collector(client()).trace(IDS.evid);
+  assert.equal(ev.root.kind, 'record');
+  assert.equal(ev.root.table, 'x_mock_evidence');
+  assert.ok(ev.recordActivity.length >= 3);
+});
+
+test('a record with no Otto activity says so', async () => {
+  const ev = await new Collector(client()).trace(`https://x.service-now.com/x_mock_case.do?sys_id=${IDS.erCase}`);
+  assert.equal(ev.root.kind, 'record');
+  assert.deepEqual(ev.recordActivity.map(x => x.id), [IDS.casePlan], 'only the agent run on the case');
+  const none = await new Collector(client()).trace(`https://x.service-now.com/sys_user.do?sys_id=${IDS.runAs}`);
+  assert.ok(none.warnings.some(w => /No Otto skill calls or agent runs are linked to this sys_user record/.test(w)));
 });
 
 function id140() { return (140).toString(16).padStart(32, '0'); }

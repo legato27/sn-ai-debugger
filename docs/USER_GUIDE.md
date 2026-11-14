@@ -61,7 +61,7 @@ The fastest way in is to open the failing record in ServiceNow and click **Use t
 
 There are three ways to start:
 
-1. **Use this page** traces the record open in the current tab. Classic forms, Next Experience URLs and workspace record URLs all work.
+1. **Use this page** traces the record open in the current tab. Classic forms, Next Experience URLs and workspace record URLs all work. In a workspace sub-record (for example evidence inside an ER case), it traces the record on screen and keeps the parent as context. On a business record such as an incident, HR case or evidence, it shows **Otto activity on this record**: every skill call linked to it (Summarize, Refine…), the nested calls a wrapper skill makes, and agent runs about it.
 2. **Trace** takes whatever you type in the box: a sys_id, a record URL, a plan number or part of a name. Press Enter or click the button.
 3. **Recent failures** lists what went wrong in the last 7 days: failed, terminated or stuck execution plans (with the platform's state reason, such as Security Violation), and failed or user-rejected LLM calls (skills included), newest first, each with its reason. Repeats of the same failure are merged into one line with a count (×41), named after the workflow or agent. Click **Trace** next to one. If nothing failed, it lists the latest runs instead.
 
@@ -76,6 +76,7 @@ What each input traces:
 | Tool sys_id or name | The script include, flow or action behind it, the agents it is bound to, recent executions |
 | Now Assist / ServiceNow Otto skill or prompt sys_id or name | Related prompt and capability records, recent Gen AI log runs of the skill with model and token counts, the prompt config's token limit, usage count, system log around the latest run |
 | Gen AI log sys_id | The call, its skill and prompt records, logs around it |
+| Business record (incident, HR case, evidence…) URL or sys_id | Skill calls linked to it through the Gen AI log's `metadata_document`, nested skill calls by the same user at the same moment, agent runs with it as `related_task_record` (including the parent record in a workspace URL), the skills involved, and the system log around the latest call |
 | VA conversation sys_id | The plans in that conversation; traces the latest |
 | Any other text | Name search across agents, workflows, tools, skills and plans; pick a match to trace it |
 

@@ -10,6 +10,7 @@ A Chrome side panel that finds out why a ServiceNow AI Agent run, agentic workfl
 
 - **Traces a run end to end.** From an execution plan it collects the tasks, agent messages, tool executions (input and output), the agents and workflow involved, their tools and what each tool calls, ACLs and the run-as user's roles, then the Generative AI log, system log, outbound HTTP calls, flows, restricted caller access and AI Guardian rows in the run's time window, plus AI app versions.
 - **Starts from anything.** A plan, task, tool execution, agent, workflow, tool, skill, prompt, Gen AI log entry, Virtual Agent conversation, a record URL, a name, or the record open in the current tab.
+- **Shows what Otto did on a record.** On an incident, HR case or evidence record (workspace sub-records included), it lists every skill call made on it, such as Summarize and Refine, the nested calls a wrapper skill makes, and the agent runs about it.
 - **Finds the failures for you.** **Recent failures** lists failed or stuck agent runs and failed or user-rejected skill calls from the last 7 days, each with its reason, including runs the platform terminated for Security Violation or Execution Failed. Repeats are merged with a count.
 - **Ranks root causes.** 51 rules (tool input casing mismatches, empty tool results, ACL role gaps, broken script includes, supervised tools on unattended runs, LLM errors, unfilled prompt variables, answers cut off at the token limit, stuck plans, overlapping agent descriptions, re-ask loops and more). A failed plan is treated as a symptom: the rule closest to the cause wins. Every finding links to the records it was raised from.
 - **Release-aware (Brazil ready).** Reads the instance release and patch, checks the deny-by-default ACLs Brazil introduced for agents, workflows, skills, flows and flow actions, and spots runaway triggers and Kill Switch disables.
@@ -69,12 +70,12 @@ See [SECURITY.md](SECURITY.md) for details and how to report a problem.
 
 ## Status
 
-Version 0.5.0. Tested against a mock ServiceNow instance, a mock Messages API and an in-memory Glide runtime (51 Node tests plus a Chromium end-to-end run). Checked read-only against one live instance (Australia patch 7): the table names the extension probes at run time all exist there (see [Architecture](docs/ARCHITECTURE.md#table-names)). Other releases may differ; issues and pull requests with real-instance findings are welcome.
+Version 0.5.0. Tested against a mock ServiceNow instance, a mock Messages API and an in-memory Glide runtime (55 Node tests plus a Chromium end-to-end run). Checked read-only against one live instance (Australia patch 7): the table names the extension probes at run time all exist there (see [Architecture](docs/ARCHITECTURE.md#table-names)). Other releases may differ; issues and pull requests with real-instance findings are welcome.
 
 ## Development
 
 ```bash
-npm test          # 51 Node tests: collectors, rules, skills, redaction, timeline, Claude client, stop scripts
+npm test          # 55 Node tests: collectors, rules, skills, redaction, timeline, Claude client, stop scripts
 ```
 
 End-to-end test (loads the extension in Chromium against a local mock instance; needs Playwright):

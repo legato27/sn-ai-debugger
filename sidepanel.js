@@ -129,6 +129,17 @@ function render(ev, rca) {
       </div></section>`);
   }
 
+  if (ev.recordActivity?.length) {
+    const list = ev.recordActivity;
+    out.push(`<section class="card"><h2>Otto activity on this record (${list.length})</h2>
+      <div class="hint">Skill calls linked to the record, newest first${list.some(x => x.nested) ? ', plus calls made with the latest one (same user, same moment) that a wrapper skill logs without the record' : ''}.</div>
+      ${list.slice(0, 25).map(x => `
+      <div class="list-item"><div><div>${esc(x.display)}${x.nested ? ' <span class="badge" title="Logged without the record, matched by user and time">nested</span>' : ''}</div>
+        <div class="meta">${esc(x.detail || '')}${x.detail ? ' · ' : ''}${esc(x.created || '')}${x.on && x.on !== ev.root?.table ? ` · on ${esc(x.on)}` : ''}</div>
+        <div class="meta${x.error || /error|fail/i.test(x.state || '') ? ' warn' : ''}">${esc(x.error || x.state || '')}</div></div>
+      <button data-trace="${esc(x.id)}">Trace</button></div>`).join('')}</section>`);
+  }
+
   if (rca.rootCause) {
     const f = rca.rootCause;
     out.push(`<section class="card root-cause"><h2>Most likely root cause</h2>

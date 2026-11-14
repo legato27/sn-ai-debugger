@@ -14,6 +14,7 @@ export const IDS = {
   http1: id(70), flow1: id(71), rca1: id(72), conv: id(100), vm1: id(101), vm2: id(102), vm3: id(103), vm4: id(104), vm5: id(105), vm6: id(106), app1: id(80), app2: id(81), app3: id(82), flowA: id(120), aclWild: id(121), st1: id(122), st2: id(123), st3: id(124), trig1: id(125),
   log3: id(53), log4: id(54), log5: id(55), pcfg: id(56), sys4: id(63), stuckPlan: id(150),
   secPlan: id(151), secTask: id(152), log6: id(57), log7: id(58), sys5: id(64), flowX: id(73),
+  skillW: id(180), skillI: id(181), evid: id(182), erCase: id(183), log8: id(184), log9: id(185), log10: id(186), log11: id(187), log12: id(188), casePlan: id(189),
 };
 
 // table -> { super, fields: { name: type | ['reference', target] | ['glide_list', target] } }
@@ -38,10 +39,13 @@ export const SCHEMA = {
   sn_aia_team_member: { super: 'sys_metadata', fields: { team: ['reference', 'sn_aia_team'], agent: ['reference', 'sn_aia_agent'] } },
   // Named unlike any guess in lib/config.js: the collector must read it from the Gen AI log's dictionary.
   x_mock_ai_skill: { super: 'sys_metadata', fields: { name: 'string', active: 'boolean' } },
+  // A business record shown as a workspace sub-record of its case (live: sn_em_evidence inside sn_hr_er_case).
+  x_mock_case: { super: 'sys_metadata', fields: { number: 'string' } },
+  x_mock_evidence: { super: 'sys_metadata', fields: { name: 'string', parent_case: ['reference', 'x_mock_case'] } },
   // Live chain for the token limit: log.prompt_config_id → prompt config.ai_config → ai config.max_tokens
   sys_generative_ai_config: { super: 'sys_metadata', fields: { name: 'string', max_tokens: 'integer' } },
   sys_generative_ai_prompt_config: { super: 'sys_metadata', fields: { ai_config: ['reference', 'sys_generative_ai_config'], order: 'integer' } },
-  sys_generative_ai_log: { super: 'sys_metadata', fields: { skill_config_id: ['reference', 'x_mock_ai_skill'], prompt_config_id: ['reference', 'sys_generative_ai_prompt_config'], prompt: 'string', response: 'string', status: 'string', error: 'string', error_code: 'string', source: 'string', model_name: 'string', prompt_token_count: 'integer', response_token_count: 'integer', output_metadata: 'string', feedback: 'string' } },
+  sys_generative_ai_log: { super: 'sys_metadata', fields: { skill_config_id: ['reference', 'x_mock_ai_skill'], prompt_config_id: ['reference', 'sys_generative_ai_prompt_config'], prompt: 'string', response: 'string', status: 'string', error: 'string', error_code: 'string', source: 'string', model_name: 'string', prompt_token_count: 'integer', response_token_count: 'integer', output_metadata: 'string', feedback: 'string', metadata_table: 'string', metadata_document: 'string' } },
   syslog: { super: 'sys_metadata', fields: { level: 'string', source: 'string', message: 'string' } },
   sys_outbound_http_log: { super: 'sys_metadata', fields: { url: 'string', response_status: 'integer' } },
   sys_flow_context: { super: 'sys_metadata', fields: { name: 'string', state: 'string' } },
@@ -105,7 +109,13 @@ export function seed() {
     { ...meta(IDS.si1), name: 'TravelProfileUtil', active: 'true', api_name: 'x_demo_travel.TravelProfileUtil' },
     { ...meta(IDS.si2), name: 'TravelPolicyUtil', active: 'true', api_name: 'x_demo_travel.TravelPolicyUtil' },
   ]);
-  put('x_mock_ai_skill', [{ ...meta(IDS.skill), name: 'Article Summarizer Demo', active: 'true' }]);
+  put('x_mock_ai_skill', [
+    { ...meta(IDS.skill), name: 'Article Summarizer Demo', active: 'true' },
+    { ...meta(IDS.skillW), name: 'Evidence Summarizer Wrapper', active: 'true' },
+    { ...meta(IDS.skillI), name: 'Evidence Summarizer', active: 'true' },
+  ]);
+  put('x_mock_case', [{ ...meta(IDS.erCase), number: 'ERC0001001' }]);
+  put('x_mock_evidence', [{ ...meta(IDS.evid), name: 'Badge access logs', parent_case: IDS.erCase }]);
   put('sys_generative_ai_config', [{ ...meta(IDS.pcfg), name: 'Article summary prompt v2', max_tokens: '400' }]);
   put('sys_generative_ai_prompt_config', [{ ...meta(id(171)), ai_config: IDS.pcfg, order: '100' }]);
   put('sys_generative_ai_log', [
@@ -116,6 +126,13 @@ export function seed() {
     { ...meta(IDS.log4, '2026-10-28 08:20:00'), skill_config_id: IDS.skill, prompt_config_id: id(171), prompt: 'Summarise KB0010002 in five sections.\nTitle: VPN setup\nBody: Install the client, sign in, choose the gateway, test, troubleshoot.', response: '1. Install: download the client. 2. Sign in: use SSO. 3. Gateway: pick the nearest. 4. Test: open the intranet. 5. Troubleshoot: if the', status: 'success', error: '', source: 'NowAssistSkill', model_name: 'claude_small', prompt_token_count: '1210', response_token_count: '400', output_metadata: '{"finish_reason":"length","response_time_ms":1830}' },
     { ...meta(IDS.log6, '2026-10-28 08:40:00'), skill_config_id: '', prompt: 'x', response: '', status: 'failed', error: 'HTTP request cancelled', error_code: '200000', source: 'AIAgent' },
     { ...meta(IDS.log7, '2026-10-28 08:45:00'), skill_config_id: '', prompt: 'x', response: '', status: 'failed', error: 'HTTP request cancelled', error_code: '200000', source: 'AIAgent' },
+    // Summarize, then Refine, on the evidence record (prompt stored as a JSON messages array, as live);
+    // the wrapper's inner skill call is logged without the record, by the same user at the same moment.
+    { ...meta(IDS.log8, '2026-10-28 07:00:00', '2026-10-28 07:00:00', 'alex.admin'), skill_config_id: IDS.skillW, metadata_table: 'x_mock_evidence', metadata_document: IDS.evid, source: 'WWNA: Default', status: 'success', error: '', model_name: 'gpt_large', prompt: JSON.stringify([{ role: 'user', content: 'Evidence title: Badge access logs\nEvidence text: null\nSummarise the evidence for the investigator.' }]), response: 'The evidence has no text to summarise.' },
+    { ...meta(IDS.log9, '2026-10-28 07:05:00', '2026-10-28 07:05:00', 'alex.admin'), skill_config_id: IDS.skillW, metadata_table: 'x_mock_evidence', metadata_document: IDS.evid, source: 'WWNA: Refine', status: 'success', error: '', model_name: 'gpt_large', prompt: 'Refine: shorter', response: 'No text.' },
+    { ...meta(IDS.log10, '2026-10-28 07:05:00', '2026-10-28 07:05:00', 'alex.admin'), skill_config_id: IDS.skillI, metadata_table: '', metadata_document: '', source: '', status: 'success', error: '', prompt: 'inner', response: 'No text.' },
+    { ...meta(IDS.log11, '2026-10-28 07:05:05', '2026-10-28 07:05:05', 'someone.else'), skill_config_id: IDS.skillI, metadata_table: '', metadata_document: '', source: '', status: 'success', error: '', prompt: 'other user', response: 'x' },
+    { ...meta(IDS.log12, '2026-10-28 07:05:08', '2026-10-28 07:05:08', 'alex.admin'), skill_config_id: IDS.skillI, metadata_table: 'x_mock_case', metadata_document: id(190), source: 'WWNA: Default', status: 'success', error: '', prompt: 'other record', response: 'x' },
     { ...meta(IDS.log5, '2026-10-28 08:30:00'), skill_config_id: IDS.skill, prompt: 'Summarise the knowledge article for a service desk agent.\nTitle: VPN setup for contractors\nDescription:\nResolution notes: []\nFollow these rules:\n- Use plain language\n- Keep it under 80 words', response: 'This article covers VPN setup.', status: 'success', error: '', source: 'NowAssistSkill', model_name: 'claude_small', feedback: 'Rejected' },
   ]);
   put('syslog', [
@@ -156,6 +173,8 @@ export function seed() {
   // the only task is an access_verification on the workflow, pointed at with a document-ID pair.
   D.sn_aia_execution_plan.push({ ...meta(IDS.secPlan, '2026-10-29 04:30:00', '2026-10-29 04:30:01', 'trigger.runner'), number: 'AIAPLN0004001', objective: 'Payroll case triage', state: 'terminated', state_reason: 'security_violation', run_type: 'trigger', related_task_table: 'sn_hr_core_case', related_task_record: id(160), agent: '', usecase: IDS.wf, error_message: '', conversation: '' });
   D.sn_aia_execution_task.push({ ...meta(IDS.secTask, '2026-10-29 04:30:01', '2026-10-29 04:30:01', 'ai.hr.agent'), execution_plan: IDS.secPlan, agent: '', state: 'complete', name: 'Access check', type: 'access_verification', target_document_table: 'sn_aia_usecase', target_document_id: IDS.wf });
+  // An agent run about the parent case
+  D.sn_aia_execution_plan.push({ ...meta(IDS.casePlan, '2026-10-28 06:00:00', '2026-10-28 06:01:00'), number: 'AIAPLN0005001', objective: 'Summarise the ER case', state: 'completed', state_reason: '', run_type: 'chat', related_task_table: 'x_mock_case', related_task_record: IDS.erCase, agent: '', usecase: '', error_message: '', conversation: '' });
   // A plan that never finished (for Recent failures)
   D.sn_aia_execution_plan.push({ ...meta(IDS.stuckPlan, '2026-10-29 04:00:00'), number: 'AIAPLN0003001', objective: 'Summarise open P1 incidents', state: 'in_progress', agent: '', usecase: '', error_message: '', conversation: '' });
   for (let i = 0; i < 6; i++) D.sn_aia_execution_plan.push({ ...meta(id(140 + i), `2026-10-29 0${i}:10:00`, `2026-10-29 0${i}:11:00`), number: `AIAPLN000200${i}`, objective: 'Relocation check for INC0010001', state: 'complete', agent: IDS.agent2, usecase: '', error_message: '', conversation: '' });

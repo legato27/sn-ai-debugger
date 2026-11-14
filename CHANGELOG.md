@@ -21,7 +21,8 @@
 - **Speed.** Table probes are primary-key lookups, lists skip the row count, window queries fetch only the columns used: the `syslog` probe went from 8 s to well under a second, a plan trace from 19 s to 14 s.
 - **Prompts stored as JSON.** The Gen AI log keeps the final prompt as a messages array with escaped newlines; the grounding checks unwrap it first.
 - **SKILL-EMPTY-GROUNDING tuned on real prompts.** A blank label counts as empty only before the end of the prompt or a no-data field, not before a filled field (a section header) or another blank label (an output template). On 240 real skill calls the looser rule flagged 75, this one 1.
-- 51 rules; 51 tests.
+- **Trace a business record.** "Use this page" on an incident, HR case or evidence record lists the Otto activity on it (skill calls by `metadata_document`, the wrapper's nested calls, agent runs by `related_task_record`) and runs the skill rules over those calls. Workspace sub-record URLs trace the record on screen, not its parent, and a bare sys_id of a business record resolves through the Gen AI log. The timeline shows each call's action (`WWNA: Default` / `WWNA: Refine`).
+- 51 rules; 55 tests.
 
 ## 0.5.0 — 2026-10-31 (Brazil update)
 
