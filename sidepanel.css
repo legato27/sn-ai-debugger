@@ -48,6 +48,9 @@ h2 { font-size: 13px; margin: 0 0 6px; text-transform: uppercase; letter-spacing
 .sev.Critical { background: var(--crit); } .sev.High { background: var(--high); } .sev.Medium { background: var(--med); }
 .sev.Low { background: var(--low); } .sev.Info { background: var(--info); }
 .rid { color: var(--muted); font-size: 11px; font-family: ui-monospace, monospace; }
+.ev-links { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 2px; }
+.ev-links a { font-size: 11px; color: var(--accent); text-decoration: none; border: 1px solid var(--border); border-radius: 9px; padding: 0 7px; }
+.ev-links a:hover { border-color: var(--accent); }
 .filters { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
 .filters button { padding: 2px 8px; font-size: 12px; }
 .filters button.on { border-color: var(--accent); color: var(--accent); }
@@ -99,3 +102,6 @@ select { font: inherit; color: var(--text); background: var(--bg); border: 1px s
 .tl-e { color: var(--crit); white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 2px; font-size: 12px; }
 .actions { border-left: 4px solid var(--high); }
 .actions .consent pre { max-height: 220px; }
+.background summary { font-weight: 600; }
+.bg-row { padding: 4px 0; border-top: 1px solid var(--border); font-size: 12px; overflow-wrap: anywhere; }
+.bg-row .tl-c { color: var(--muted); }

@@ -12,15 +12,18 @@ export const IDS = {
   si1: id(20), si2: id(21), runAs: id(30), me: id(31), roleItil: id(32), roleAdmin: id(33), roleHr: id(34),
   acl1: id(40), aclRole1: id(41), skill: id(50), log1: id(51), log2: id(52), sys1: id(60), sys2: id(61), sys3: id(62),
   http1: id(70), flow1: id(71), rca1: id(72), conv: id(100), vm1: id(101), vm2: id(102), vm3: id(103), vm4: id(104), vm5: id(105), vm6: id(106), app1: id(80), app2: id(81), app3: id(82), flowA: id(120), aclWild: id(121), st1: id(122), st2: id(123), st3: id(124), trig1: id(125),
+  log3: id(53), log4: id(54), log5: id(55), pcfg: id(56), sys4: id(63), stuckPlan: id(150),
+  secPlan: id(151), secTask: id(152), log6: id(57), log7: id(58), sys5: id(64), flowX: id(73),
+  skillW: id(180), skillI: id(181), evid: id(182), erCase: id(183), log8: id(184), log9: id(185), log10: id(186), log11: id(187), log12: id(188), casePlan: id(189),
 };
 
 // table -> { super, fields: { name: type | ['reference', target] | ['glide_list', target] } }
 export const SCHEMA = {
   sys_metadata: { fields: { sys_id: 'GUID', sys_created_on: 'glide_date_time', sys_updated_on: 'glide_date_time', sys_created_by: 'string' } },
-  sn_aia_execution_plan: { super: 'sys_metadata', fields: { number: 'string', objective: 'string', state: 'string', agent: ['reference', 'sn_aia_agent'], usecase: ['reference', 'sn_aia_usecase'], error_message: 'string', conversation: ['reference', 'sys_cs_conversation'] } },
+  sn_aia_execution_plan: { super: 'sys_metadata', fields: { number: 'string', objective: 'string', state: 'string', state_reason: 'string', run_type: 'string', related_task_table: 'string', related_task_record: 'string', agent: ['reference', 'sn_aia_agent'], usecase: ['reference', 'sn_aia_usecase'], error_message: 'string', conversation: ['reference', 'sys_cs_conversation'] } },
   sys_cs_conversation: { super: 'sys_metadata', fields: { state: 'string', device_type: 'string' } },
   sys_cs_message: { super: 'sys_metadata', fields: { conversation: ['reference', 'sys_cs_conversation'], direction: 'string', payload: 'string', sequence: 'integer' } },
-  sn_aia_execution_task: { super: 'sys_metadata', fields: { execution_plan: ['reference', 'sn_aia_execution_plan'], agent: ['reference', 'sn_aia_agent'], state: 'string', name: 'string' } },
+  sn_aia_execution_task: { super: 'sys_metadata', fields: { execution_plan: ['reference', 'sn_aia_execution_plan'], agent: ['reference', 'sn_aia_agent'], state: 'string', name: 'string', type: 'string', target_document_table: 'string', target_document_id: 'string' } },
   sn_aia_message: { super: 'sys_metadata', fields: { execution_plan: ['reference', 'sn_aia_execution_plan'], content: 'string', role: 'string' } },
   sn_aia_tools_execution: { super: 'sys_metadata', fields: { execution_plan: ['reference', 'sn_aia_execution_plan'], tool: ['reference', 'sn_aia_tool'], state: 'string', input: 'string', output: 'string', error: 'string', start_time: 'glide_date_time', end_time: 'glide_date_time' } },
   sn_aia_agent: { super: 'sys_metadata', fields: { name: 'string', description: 'string', instructions: 'string', active: 'boolean', run_as_user: ['reference', 'sys_user'] } },
@@ -30,11 +33,21 @@ export const SCHEMA = {
   sys_properties: { super: 'sys_metadata', fields: { name: 'string', value: 'string' } },
   sn_aia_trigger_configuration: { super: 'sys_metadata', fields: { usecase: ['reference', 'sn_aia_usecase'], name: 'string', active: 'boolean' } },
   sn_aia_agent_tool_m2m: { super: 'sys_metadata', fields: { agent: ['reference', 'sn_aia_agent'], tool: ['reference', 'sn_aia_tool'], active: 'boolean', execution_mode: 'string' } },
-  sn_aia_usecase: { super: 'sys_metadata', fields: { name: 'string', description: 'string', active: 'boolean' } },
-  sn_aia_team_member: { super: 'sys_metadata', fields: { usecase: ['reference', 'sn_aia_usecase'], agent: ['reference', 'sn_aia_agent'] } },
-  sn_nowassist_skill_config: { super: 'sys_metadata', fields: { name: 'string', active: 'boolean' } },
-  sys_generative_ai_log: { super: 'sys_metadata', fields: { skill_config_id: ['reference', 'sn_nowassist_skill_config'], prompt: 'string', response: 'string', status: 'string', error: 'string', source: 'string' } },
-  syslog: { super: 'sys_metadata', fields: { level: 'string', source: 'string', message: 'string' } },
+  // Live-instance shape: the workflow references a team, and team members reference the team.
+  sn_aia_team: { super: 'sys_metadata', fields: { name: 'string' } },
+  sn_aia_usecase: { super: 'sys_metadata', fields: { name: 'string', description: 'string', active: 'boolean', team: ['reference', 'sn_aia_team'] } },
+  sn_aia_team_member: { super: 'sys_metadata', fields: { team: ['reference', 'sn_aia_team'], agent: ['reference', 'sn_aia_agent'] } },
+  // Named unlike any guess in lib/config.js: the collector must read it from the Gen AI log's dictionary.
+  x_mock_ai_skill: { super: 'sys_metadata', fields: { name: 'string', active: 'boolean' } },
+  // A business record shown as a workspace sub-record of its case (live: sn_em_evidence inside sn_hr_er_case).
+  x_mock_case: { super: 'sys_metadata', fields: { number: 'string' } },
+  x_mock_evidence: { super: 'sys_metadata', fields: { name: 'string', parent_case: ['reference', 'x_mock_case'] } },
+  // Live chain for the token limit: log.prompt_config_id → prompt config.ai_config → ai config.max_tokens
+  sys_generative_ai_config: { super: 'sys_metadata', fields: { name: 'string', max_tokens: 'integer' } },
+  sys_generative_ai_prompt_config: { super: 'sys_metadata', fields: { ai_config: ['reference', 'sys_generative_ai_config'], order: 'integer' } },
+  sys_generative_ai_log: { super: 'sys_metadata', fields: { skill_config_id: ['reference', 'x_mock_ai_skill'], prompt_config_id: ['reference', 'sys_generative_ai_prompt_config'], prompt: 'string', response: 'string', status: 'string', error: 'string', error_code: 'string', source: 'string', model_name: 'string', prompt_token_count: 'integer', response_token_count: 'integer', output_metadata: 'string', feedback: 'string', metadata_table: 'string', metadata_document: 'string' } },
+  // context_map is JSON: the session user, scope and the record or script being run. [V] live instance
+  syslog: { super: 'sys_metadata', fields: { level: 'string', source: 'string', message: 'string', context_map: 'string' } },
   sys_outbound_http_log: { super: 'sys_metadata', fields: { url: 'string', response_status: 'integer' } },
   sys_flow_context: { super: 'sys_metadata', fields: { name: 'string', state: 'string' } },
   sys_restricted_caller_access: { super: 'sys_metadata', fields: { source_scope: 'string', target_scope: 'string', status: 'string' } },
@@ -44,6 +57,9 @@ export const SCHEMA = {
   sys_security_acl: { super: 'sys_metadata', fields: { name: 'string', operation: 'string', type: ['reference', 'sys_security_type'], security_attribute: 'string', decision_type: 'string', active: 'boolean', advanced: 'boolean', condition: 'string', description: 'string', admin_overrides: 'boolean' } },
   sys_security_acl_role: { super: 'sys_metadata', fields: { sys_security_acl: ['reference', 'sys_security_acl'], sys_user_role: ['reference', 'sys_user_role'] } },
   sys_store_app: { super: 'sys_metadata', fields: { scope: 'string', name: 'string', version: 'string', active: 'boolean' } },
+  // As on a real instance, internal_type and reference are reference fields, so the Table API
+  // returns them as { link, value } unless sysparm_exclude_reference_link=true.
+  sys_dictionary: { super: 'sys_metadata', fields: { name: 'string', element: 'string', internal_type: ['reference', 'sys_glide_object'], reference: ['reference', 'sys_db_object'], column_label: 'string' } },
   sys_script_include: { super: 'sys_metadata', fields: { name: 'string', active: 'boolean', api_name: 'string' } },
 };
 
@@ -87,24 +103,61 @@ export function seed() {
     { ...meta(IDS.m2m1), agent: IDS.agent, tool: IDS.tool1, active: 'true', execution_mode: 'autonomous' },
     { ...meta(IDS.m2m2), agent: IDS.agent, tool: IDS.tool2, active: 'true', execution_mode: 'supervised' },
   ]);
-  put('sn_aia_usecase', [{ ...meta(IDS.wf), name: 'Travel Assessment', description: 'Business travel approval', active: 'true' }]);
-  put('sn_aia_team_member', [{ ...meta(IDS.tm1), usecase: IDS.wf, agent: IDS.agent }]);
+  put('sn_aia_team', [{ ...meta(id(170)), name: 'Travel Assessment team' }]);
+  put('sn_aia_usecase', [{ ...meta(IDS.wf), name: 'Travel Assessment', description: 'Business travel approval', active: 'true', team: id(170) }]);
+  put('sn_aia_team_member', [{ ...meta(IDS.tm1), team: id(170), agent: IDS.agent }]);
   put('sys_script_include', [
     { ...meta(IDS.si1), name: 'TravelProfileUtil', active: 'true', api_name: 'x_demo_travel.TravelProfileUtil' },
     { ...meta(IDS.si2), name: 'TravelPolicyUtil', active: 'true', api_name: 'x_demo_travel.TravelPolicyUtil' },
   ]);
-  put('sn_nowassist_skill_config', [{ ...meta(IDS.skill), name: 'Article Summarizer Demo', active: 'true' }]);
+  put('x_mock_ai_skill', [
+    { ...meta(IDS.skill), name: 'Article Summarizer Demo', active: 'true' },
+    { ...meta(IDS.skillW), name: 'Evidence Summarizer Wrapper', active: 'true' },
+    { ...meta(IDS.skillI), name: 'Evidence Summarizer', active: 'true' },
+  ]);
+  put('x_mock_case', [{ ...meta(IDS.erCase), number: 'ERC0001001' }]);
+  put('x_mock_evidence', [{ ...meta(IDS.evid), name: 'Badge access logs', parent_case: IDS.erCase }]);
+  put('sys_generative_ai_config', [{ ...meta(IDS.pcfg), name: 'Article summary prompt v2', max_tokens: '400' }]);
+  put('sys_generative_ai_prompt_config', [{ ...meta(id(171)), ai_config: IDS.pcfg, order: '100' }]);
   put('sys_generative_ai_log', [
     { ...meta(IDS.log1, '2026-10-29 02:00:30'), skill_config_id: '', prompt: 'You are an travel advisor…', response: 'Eligible', status: 'success', error: '', source: 'AIAgent' },
     { ...meta(IDS.log2, '2026-10-28 09:00:00'), skill_config_id: IDS.skill, prompt: 'Summarise KB0010001 for jane.tan@example.com', response: '', status: 'error', error: 'com.glide.oneextend: OneExtendUtil.resolveModelConfig failed: no model config for capability', source: 'NowAssistSkill' },
+    // Skill calls that "worked" but gave a poor answer: unfilled variables, truncation, empty grounding.
+    { ...meta(IDS.log3, '2026-10-28 08:10:00'), skill_config_id: IDS.skill, prompt: 'Summarise the knowledge article below for an agent.\nTitle: {{kb_knowledge.short_description}}\nBody: {{ArticleFetcher.output}}', response: 'The article title was not provided, so I cannot summarise it.', status: 'success', error: '', source: 'NowAssistSkill', model_name: 'claude_small' },
+    { ...meta(IDS.log4, '2026-10-28 08:20:00'), skill_config_id: IDS.skill, prompt_config_id: id(171), prompt: 'Summarise KB0010002 in five sections.\nTitle: VPN setup\nBody: Install the client, sign in, choose the gateway, test, troubleshoot.', response: '1. Install: download the client. 2. Sign in: use SSO. 3. Gateway: pick the nearest. 4. Test: open the intranet. 5. Troubleshoot: if the', status: 'success', error: '', source: 'NowAssistSkill', model_name: 'claude_small', prompt_token_count: '1210', response_token_count: '400', output_metadata: '{"finish_reason":"length","response_time_ms":1830}' },
+    { ...meta(IDS.log6, '2026-10-28 08:40:00'), skill_config_id: '', prompt: 'x', response: '', status: 'failed', error: 'HTTP request cancelled', error_code: '200000', source: 'AIAgent' },
+    { ...meta(IDS.log7, '2026-10-28 08:45:00'), skill_config_id: '', prompt: 'x', response: '', status: 'failed', error: 'HTTP request cancelled', error_code: '200000', source: 'AIAgent' },
+    // Summarize, then Refine, on the evidence record (prompt stored as a JSON messages array, as live);
+    // the wrapper's inner skill call is logged without the record, by the same user at the same moment.
+    { ...meta(IDS.log8, '2026-10-28 07:00:00', '2026-10-28 07:00:00', 'alex.admin'), skill_config_id: IDS.skillW, metadata_table: 'x_mock_evidence', metadata_document: IDS.evid, source: 'WWNA: Default', status: 'success', error: '', model_name: 'gpt_large', prompt: JSON.stringify([{ role: 'user', content: 'Evidence title: Badge access logs\nEvidence text: null\nSummarise the evidence for the investigator.' }]), response: 'Understood. I will respond only in English.' },
+    // Earlier wrapper calls on other records: the same reply every time
+    ...[0, 1, 2].map(i => ({ ...meta(id(191 + i), `2026-10-27 1${i}:00:00`, `2026-10-27 1${i}:00:00`, 'alex.admin'), skill_config_id: IDS.skillW, metadata_table: 'x_mock_evidence', metadata_document: id(195), source: 'WWNA: Default', status: 'success', error: '', prompt: 'x', response: 'Understood. I will respond only in English.' })),
+    { ...meta(IDS.log9, '2026-10-28 07:05:00', '2026-10-28 07:05:00', 'alex.admin'), skill_config_id: IDS.skillW, metadata_table: 'x_mock_evidence', metadata_document: IDS.evid, source: 'WWNA: Refine', status: 'success', error: '', model_name: 'gpt_large', prompt: 'Refine: shorter', response: 'Understood. I will respond only in English.' },
+    { ...meta(IDS.log10, '2026-10-28 07:05:00', '2026-10-28 07:05:00', 'alex.admin'), skill_config_id: IDS.skillI, metadata_table: '', metadata_document: '', source: '', status: 'success', error: '', prompt: 'inner', response: 'Kindly check if attachments are present. Make sure that the uploaded documents are in formats: PNG, JPG, JPEG, PDF or DOCX only.' },
+    { ...meta(IDS.log11, '2026-10-28 07:05:05', '2026-10-28 07:05:05', 'someone.else'), skill_config_id: IDS.skillI, metadata_table: '', metadata_document: '', source: '', status: 'success', error: '', prompt: 'other user', response: 'x' },
+    { ...meta(IDS.log12, '2026-10-28 07:05:08', '2026-10-28 07:05:08', 'alex.admin'), skill_config_id: IDS.skillI, metadata_table: 'x_mock_case', metadata_document: id(190), source: 'WWNA: Default', status: 'success', error: '', prompt: 'other record', response: 'x' },
+    { ...meta(IDS.log5, '2026-10-28 08:30:00'), skill_config_id: IDS.skill, prompt: 'Summarise the knowledge article for a service desk agent.\nTitle: VPN setup for contractors\nDescription:\nResolution notes: []\nFollow these rules:\n- Use plain language\n- Keep it under 80 words', response: 'This article covers VPN setup.', status: 'success', error: '', source: 'NowAssistSkill', model_name: 'claude_small', feedback: 'Rejected' },
   ]);
+  // As live: a session's lines carry its user in sys_created_by and context_map._user; background
+  // jobs log as "system". The run's lines are written in the agent's run-as session (travel.ai.user).
+  const ctx = (user, extra = {}) => JSON.stringify({ _user: user, _logged_in_user: user, _scope: 'global', ...extra });
+  const agentLog = (k, t, level, source, message, extra) => ({ ...meta(IDS[k], t, t, 'travel.ai.user'), level, source, message, context_map: ctx('travel.ai.user', extra) });
   put('syslog', [
-    { ...meta(IDS.sys1, '2026-10-29 02:00:57'), level: '2', source: 'x_demo_travel', message: 'Evaluation error in TravelPolicyUtil: Cannot read property "getValue" of null' },
-    { ...meta(IDS.sys2, '2026-10-29 02:00:11'), level: '1', source: 'sn_aia', message: 'Security restricted: Read operation on table x_demo_travel_profile denied for user travel.ai.user' },
-    { ...meta(IDS.sys3, '2026-10-29 05:00:00'), level: '2', source: 'other', message: 'outside window' },
+    agentLog('sys1', '2026-10-29 02:00:57', '2', 'x_demo_travel', 'Evaluation error in TravelPolicyUtil: Cannot read property "getValue" of null', { _script_record: IDS.si2 }),
+    agentLog('sys2', '2026-10-29 02:00:11', '1', 'sn_aia', 'Security restricted: Read operation on table x_demo_travel_profile denied for user travel.ai.user'),
+    { ...meta(IDS.sys3, '2026-10-29 05:00:00'), level: '2', source: 'other', message: 'outside window', context_map: ctx('system') },
+    agentLog('sys4', '2026-10-29 02:00:45', '2', 'sn-gaf', 'Group action failed: no records matched the action condition'),
+    { ...meta(IDS.sys5, '2026-10-29 02:00:50', '2026-10-29 02:00:50', 'someone.else'), level: '1', source: 'hr', message: 'Security restricted: Read operation on table sn_hr_core_case denied for user someone.else', context_map: ctx('someone.else') },
+    { ...meta(id(204), '2026-10-28 07:04:57', '2026-10-28 07:04:57', 'alex.admin'), level: '2', source: 'com.glide.ui.ServletErrorListener', message: `Error while executing sync feature FDIH call. Feature_name : ${id(205)}, service plan invocation id : ${id(206)}`, context_map: ctx('alex.admin') },
+    // Background noise in the same minutes, from scheduled jobs
+    ...[0, 1, 2].map(i => ({ ...meta(id(200 + i), `2026-10-29 02:00:${20 + i * 10}`), level: '2', source: 'Impact Tree Builder Job', message: `Exception at executeImpactTreeBuilder: For input string: "${i}" java.lang.NumberFormatException`, context_map: ctx('system', { job_name: 'Impact Tree Builder' }) })),
+    { ...meta(id(203), '2026-10-29 02:00:35'), level: '2', source: 'com.glide.ui.ServletErrorListener', message: 'Evaluator.evaluateString() problem: java.lang.SecurityException: Unsupported call to GlideEncrypter', context_map: ctx('system') },
   ]);
   put('sys_outbound_http_log', [{ ...meta(IDS.http1, '2026-10-29 02:00:40'), url: 'https://api.example.com/policy?country=XX', response_status: '503' }]);
-  put('sys_flow_context', [{ ...meta(IDS.flow1, '2026-10-29 02:00:21', '2026-10-29 02:00:58'), name: 'Travel - Evaluate Policy', state: 'ERROR' }]);
+  put('sys_flow_context', [
+    { ...meta(IDS.flow1, '2026-10-29 02:00:21', '2026-10-29 02:00:58'), name: 'Travel - Evaluate Policy', state: 'ERROR' },
+    { ...meta(IDS.flowX, '2026-10-29 02:00:30', '2026-10-29 02:00:40'), name: 'Nightly CMDB sync', state: 'ERROR' },
+  ]);
   put('sys_restricted_caller_access', []);
   put('sys_user', [{ ...meta(IDS.runAs), user_name: 'travel.ai.user', name: 'Travel AI User' }, { ...meta(IDS.me), user_name: 'alex.admin', name: 'Alex Admin' }]);
   put('sys_user_role', [{ ...meta(IDS.roleItil), name: 'itil' }, { ...meta(IDS.roleAdmin), name: 'admin' }, { ...meta(IDS.roleHr), name: 'x_demo_travel.reader' }]);
@@ -123,9 +176,18 @@ export function seed() {
     { ...meta(id(131)), name: 'sn_aia.kill_switch.mode', value: 'enforce' },
     { ...meta(id(132)), name: 'sn_aia.kill_switch.max_fires_per_window', value: '5' },
     { ...meta(id(133)), name: 'sn_aia.kill_switch.window_size', value: '1440' },
+    { ...meta(id(134)), name: 'com.glide.oneapi.fdih.async.quick.mode', value: 'true' },
   ]);
   put('sn_aia_trigger_configuration', [{ ...meta(IDS.trig1), usecase: IDS.wf, name: 'Travel request created', active: 'false' }]);
   // Five runs of the same objective within an hour: a runaway trigger
+  // A triggered run stopped at its access check (state terminated, reason security_violation):
+  // the only task is an access_verification on the workflow, pointed at with a document-ID pair.
+  D.sn_aia_execution_plan.push({ ...meta(IDS.secPlan, '2026-10-29 04:30:00', '2026-10-29 04:30:01', 'trigger.runner'), number: 'AIAPLN0004001', objective: 'Payroll case triage', state: 'terminated', state_reason: 'security_violation', run_type: 'trigger', related_task_table: 'sn_hr_core_case', related_task_record: id(160), agent: '', usecase: IDS.wf, error_message: '', conversation: '' });
+  D.sn_aia_execution_task.push({ ...meta(IDS.secTask, '2026-10-29 04:30:01', '2026-10-29 04:30:01', 'ai.hr.agent'), execution_plan: IDS.secPlan, agent: '', state: 'complete', name: 'Access check', type: 'access_verification', target_document_table: 'sn_aia_usecase', target_document_id: IDS.wf });
+  // An agent run about the parent case
+  D.sn_aia_execution_plan.push({ ...meta(IDS.casePlan, '2026-10-28 06:00:00', '2026-10-28 06:01:00'), number: 'AIAPLN0005001', objective: 'Summarise the ER case', state: 'completed', state_reason: '', run_type: 'chat', related_task_table: 'x_mock_case', related_task_record: IDS.erCase, agent: '', usecase: '', error_message: '', conversation: '' });
+  // A plan that never finished (for Recent failures)
+  D.sn_aia_execution_plan.push({ ...meta(IDS.stuckPlan, '2026-10-29 04:00:00'), number: 'AIAPLN0003001', objective: 'Summarise open P1 incidents', state: 'in_progress', agent: '', usecase: '', error_message: '', conversation: '' });
   for (let i = 0; i < 6; i++) D.sn_aia_execution_plan.push({ ...meta(id(140 + i), `2026-10-29 0${i}:10:00`, `2026-10-29 0${i}:11:00`), number: `AIAPLN000200${i}`, objective: 'Relocation check for INC0010001', state: 'complete', agent: IDS.agent2, usecase: '', error_message: '', conversation: '' });
   put('sys_security_acl_role', [{ ...meta(IDS.aclRole1), sys_security_acl: IDS.acl1, sys_user_role: IDS.roleHr }]);
   put('sys_store_app', [
@@ -220,7 +282,7 @@ export function startMock({ port = 0, tls = null, requireToken = true, token = '
     const r = (tableOf(t) || []).find(x => x.sys_id === sysId);
     return r ? (r.number || r.name || r.user_name || r.sys_id) : '';
   };
-  const present = (t, row, fields, dv) => {
+  const present = (t, row, fields, dv, noLink) => {
     const keys = fields ? fields.split(',') : Object.keys(row);
     const o = {};
     for (const k of keys) {
@@ -237,7 +299,10 @@ export function startMock({ port = 0, tls = null, requireToken = true, token = '
         const ty = fieldType(t, k);
         const disp = Array.isArray(ty) && ty[0] === 'reference' && raw ? displayOf(ty[1], raw) : raw;
         o[k] = { value: raw, display_value: disp };
-      } else o[k] = raw;
+      } else {
+        const ty = fieldType(t, k);
+        o[k] = Array.isArray(ty) && ty[0] === 'reference' && raw && !noLink ? { link: `https://mock.service-now.com/api/now/table/${ty[1]}?sys_id=${raw}`, value: raw } : raw;
+      }
     }
     return o;
   };
@@ -270,15 +335,20 @@ export function startMock({ port = 0, tls = null, requireToken = true, token = '
     const p = Object.fromEntries(u.searchParams);
     if (sysId) {
       const r = rows.find(x => x.sys_id === sysId);
-      return r ? send(200, { result: present(t, r, p.sysparm_fields, p.sysparm_display_value) }) : send(404, { error: { message: 'No Record found' } });
+      return r ? send(200, { result: present(t, r, p.sysparm_fields, p.sysparm_display_value, p.sysparm_exclude_reference_link === 'true') }) : send(404, { error: { message: 'No Record found' } });
     }
     const { groups, order } = parseQuery(p.sysparm_query);
     let out = rows.filter(r => groups.every(g => g.some(c => match(r, c))));
     for (const [f, dir] of order.reverse()) out = out.slice().sort((a, b) => (String(a[f] ?? '') < String(b[f] ?? '') ? -dir : String(a[f] ?? '') > String(b[f] ?? '') ? dir : 0));
-    if (api === 'stats') return send(200, { result: { stats: { count: String(out.length) } } });
+    if (api === 'stats') {
+      const gb = p.sysparm_group_by;
+      if (!gb) return send(200, { result: { stats: { count: String(out.length) } } });
+      const groups = out.reduce((m, r) => ((m[r[gb] ?? ''] = (m[r[gb] ?? ''] || 0) + 1), m), {});
+      return send(200, { result: Object.entries(groups).map(([value, c]) => ({ stats: { count: String(c) }, groupby_fields: [{ field: gb, value }] })) });
+    }
     const total = out.length;
     out = out.slice(0, Number(p.sysparm_limit || 10000));
-    send(200, { result: out.map(r => present(t, r, p.sysparm_fields, p.sysparm_display_value)) }, { 'X-Total-Count': String(total) });
+    send(200, { result: out.map(r => present(t, r, p.sysparm_fields, p.sysparm_display_value, p.sysparm_exclude_reference_link === 'true')) }, { 'X-Total-Count': String(total) });
   };
   const server = tls ? https.createServer({ key: readFileSync(tls.key), cert: readFileSync(tls.cert) }, handler) : http.createServer(handler);
   return new Promise(r => server.listen(port, '127.0.0.1', () => r({ server, port: server.address().port, token, data, claudeLog, scriptPosts })));

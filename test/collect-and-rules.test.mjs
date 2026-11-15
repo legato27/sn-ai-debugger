@@ -43,8 +43,9 @@ test('trace an execution plan by sys_id: finds the real root cause', async () =>
   assert.equal(ev.norm.agents[0].tools.length, 2);
   assert.equal(ev.norm.agents[0].runAs.name, 'Travel AI User');
   assert.deepEqual(ev.norm.agents[0].acls[0].roles, ['x_demo_travel.reader']);
-  // Window filter excluded the 05:00 syslog row
-  assert.equal(ev.norm.syslog.length, 2);
+  // Window filter excluded the 05:00 row. 8 = 3 lines from the run's session, another user's denial, 4 background job errors
+  assert.equal(ev.norm.syslog.length, 8);
+  assert.deepEqual(ev.norm.syslog.filter(x => x.link).map(x => x.id).sort(), [IDS.sys1, IDS.sys2, IDS.sys4].sort());
   assert.ok(ev.user.isAdmin);
 
   const rca = runRules(ev, { now: NOW });
@@ -84,7 +85,7 @@ test('trace an agent: config, tools, ACLs, recent plans, description overlap', a
 test('trace a skill: links Gen AI logs and recognises the resolveModelConfig pattern', async () => {
   const ev = await new Collector(client()).trace(IDS.skill);
   assert.equal(ev.root.kind, 'skill');
-  assert.equal(ev.norm.genaiLogs.length, 1);
+  assert.equal(ev.norm.genaiLogs.length, 4);
   const rca = runRules(ev, { now: NOW });
   const g = rca.findings.find(f => f.id === 'GENAI-ERR');
   assert.ok(g);
@@ -97,11 +98,11 @@ test('search by name returns candidates', async () => {
   assert.ok(kinds.includes('agent') && kinds.includes('workflow'), kinds.join(','));
 });
 
-test('workflow trace pulls team agents and recent plans', async () => {
+test('workflow trace pulls team agents (workflow → team → members) and recent plans', async () => {
   const ev = await new Collector(client()).trace(IDS.wf);
   assert.equal(ev.root.kind, 'workflow');
   assert.equal(ev.norm.agents.length, 1);
-  assert.equal(ev.recentPlans.length, 1);
+  assert.equal(ev.recentPlans.length, 2, 'the travel run and the security-violation run');
 });
 
 test('unknown sys_id produces a warning, not a crash', async () => {

@@ -2,7 +2,7 @@ import { makeTabClient } from './lib/sn-client.js';
 import { Collector, parseSnUrl } from './lib/collectors.js';
 import { runRules, SEVERITY } from './lib/rules.js';
 import { redactEvidence } from './lib/redact.js';
-import { toMarkdown } from './lib/report.js';
+import { toMarkdown, evidenceTable } from './lib/report.js';
 import { DEFAULT_SETTINGS, KIND_LABEL } from './lib/config.js';
 import { KIND_LABEL as TL_LABEL } from './lib/timeline.js';
 import { availableActions, pageFillScript } from './lib/actions.js';
@@ -129,12 +129,24 @@ function render(ev, rca) {
       </div></section>`);
   }
 
+  if (ev.recordActivity?.length) {
+    const list = ev.recordActivity;
+    out.push(`<section class="card"><h2>Otto activity on this record (${list.length})</h2>
+      <div class="hint">Skill calls linked to the record, newest first${list.some(x => x.nested) ? ', plus calls made with the latest one (same user, same moment) that a wrapper skill logs without the record' : ''}.</div>
+      ${list.slice(0, 25).map(x => `
+      <div class="list-item"><div><div>${esc(x.display)}${x.nested ? ' <span class="badge" title="Logged without the record, matched by user and time">nested</span>' : ''}</div>
+        <div class="meta">${esc(x.detail || '')}${x.detail ? ' · ' : ''}${esc(x.created || '')}${x.on && x.on !== ev.root?.table ? ` · on ${esc(x.on)}` : ''}</div>
+        <div class="meta${x.error || /error|fail/i.test(x.state || '') ? ' warn' : ''}">${esc(x.error || x.state || '')}</div></div>
+      <button data-trace="${esc(x.id)}">Trace</button></div>`).join('')}</section>`);
+  }
+
   if (rca.rootCause) {
     const f = rca.rootCause;
     out.push(`<section class="card root-cause"><h2>Most likely root cause</h2>
       <div class="rc-title"><span class="sev ${f.severity}">${f.severity}</span>${esc(f.title)}</div>
       ${f.detail ? `<div class="fd">${esc(f.detail)}</div>` : ''}
       ${f.fix ? `<div class="fx"><b>Fix:</b> ${esc(f.fix)}</div>` : ''}
+      ${evidenceLinks(f)}
       <div class="rid">${esc(f.id)}</div>
       ${rca.alsoLikely?.length ? `<div class="also"><b>Also check:</b><ul>${rca.alsoLikely.map(a => `<li><span class="sev ${a.severity}">${a.severity}</span>${esc(a.title)}</li>`).join('')}</ul></div>` : ''}</section>`);
   }
@@ -151,19 +163,38 @@ function render(ev, rca) {
     const conv = ev.norm?.conversation;
     out.push(`<section class="card"><h2>Conversation timeline (${tl.length})</h2>
       ${conv ? `<div class="hint">VA conversation · ${esc(conv.deviceType || '')} ${esc(conv.state || '')}</div>` : `<div class="hint">No Virtual Agent transcript linked; showing agent messages, tool and LLM calls.</div>`}
+      ${ev.background?.total && !tl.some(e => e.kind === 'error') ? `<div class="hint">No system log error came from this run. ${ev.background.total} errors from other jobs and users in the same minutes are under Background.</div>` : ''}
       <div class="timeline">${tl.slice(0, 300).map(e => `<div class="tl ${esc(e.kind)}">
         <div class="tl-h"><span class="tl-t">${esc(String(e.t).slice(11))}</span><span class="tl-k">${esc(TL_LABEL[e.kind] || e.kind)}</span>
           ${e.ref?.id ? `<a href="#" data-open="${esc(e.ref.table)}|${esc(e.ref.id)}">${esc(e.who)}</a>` : esc(e.who)}
-          ${e.state ? `<span class="tl-s">${esc(e.state)}</span>` : ''}${e.durationMs ? `<span class="tl-s">${(e.durationMs / 1000).toFixed(1)} s</span>` : ''}</div>
+          ${e.count > 1 ? `<span class="badge" title="The same error ${e.count} times in this run">×${e.count}</span>` : ''}${e.state ? `<span class="tl-s">${esc(e.state)}</span>` : ''}${e.durationMs ? `<span class="tl-s">${(e.durationMs / 1000).toFixed(1)} s</span>` : ''}</div>
         ${e.content ? (String(e.content).length > 400 ? `<details><summary class="tl-c">${esc(String(e.content).slice(0, 400))}…</summary><div class="tl-c">${esc(e.content)}</div></details>` : `<div class="tl-c">${esc(e.content)}</div>`) : ''}
         ${e.error ? `<div class="tl-e">${esc(e.error)}</div>` : ''}</div>`).join('')}</div></section>`);
+  }
+
+  const bg = ev.background;
+  if (bg && (bg.total || bg.flows)) {
+    out.push(`<section class="card background"><details><summary>Background: ${bg.total} error${bg.total === 1 ? '' : 's'}${bg.flows ? ` and ${bg.flows} failed or waiting flows` : ''} not from this run <span class="count">${bg.groups.length} kinds</span></summary>
+      <div class="hint">Logged in the same minutes by other jobs and users. None names a record of this run or comes from its users' sessions, so they are left out of the findings and the timeline.</div>
+      ${bg.groups.slice(0, 15).map(g => `<div class="bg-row"><span class="badge">×${g.count}</span> <a href="#" data-open="syslog|${esc(g.id)}">${esc(g.source)}</a> <span class="tl-c">${esc(g.text)}</span></div>`).join('')}
+      ${bg.groups.length > 15 ? `<div class="hint">…and ${bg.groups.length - 15} more kinds.</div>` : ''}</details></section>`);
   }
 
   if (ev.root) out.push('<section class="card claude" id="claudeCard"></section>');
   if (ev.root) out.push('<section class="card actions hidden" id="actionsCard"></section>');
 
+  if (ev.recentFailures) {
+    const days = ev.meta.failureWindow?.days ?? 7;
+    const list = ev.recentFailures;
+    out.push(`<section class="card"><h2>Recent failures (${list.length}${list.length > 25 ? ', newest 25' : ''})</h2>
+      ${list.length ? list.slice(0, 25).map(x => `
+      <div class="list-item"><div><div>${esc(x.display)}${x.count > 1 ? ` <span class="badge" title="Same failure ${x.count} times; the newest is traced">×${x.count}</span>` : ''}</div><div class="meta">${esc(x.label)} · ${x.count > 1 ? 'latest ' : ''}${esc(x.created || '')}</div><div class="meta warn">${esc(x.reason)}</div></div>
+      <button data-trace="${esc(x.id)}">Trace</button></div>`).join('')
+        : `<div class="hint">No failed or stuck agent runs, and no failed or rejected LLM calls, in the last ${days} days.${ev.recentPlans?.length ? ' The latest runs are listed below.' : ''}</div>`}</section>`);
+  }
+
   if (ev.recentPlans?.length) {
-    out.push(`<section class="card"><h2>Execution plans</h2>${ev.recentPlans.slice(0, 15).map(p => `
+    out.push(`<section class="card"><h2>${ev.recentFailures ? 'Latest runs' : 'Execution plans'}</h2>${ev.recentPlans.slice(0, 15).map(p => `
       <div class="list-item"><div><div>${esc(p.display)}</div><div class="meta">${esc(p.state || '')} · ${esc(p.created || '')}</div></div>
       <button data-trace="${esc(p.id)}">Trace</button></div>`).join('')}</section>`);
   }
@@ -344,7 +375,21 @@ function findingsHtml(findings) {
       <div class="ft"><span class="sev ${f.severity}">${f.severity}</span>${esc(f.title)}</div>
       ${f.detail ? `<div class="fd">${esc(f.detail)}</div>` : ''}
       ${f.fix ? `<div class="fx"><b>Fix:</b> ${esc(f.fix)}</div>` : ''}
+      ${evidenceLinks(f)}
       <div class="rid">${esc(f.id)} · ${esc(f.category)}</div></div>`).join('');
+}
+
+// Chips that open the records a finding was raised from (same data-open handler as the timeline).
+const EV_LABEL = { ...KIND_LABEL, skill: 'Skill', acl: 'ACL', syslog: 'System log', http: 'HTTP call', flow: 'Flow', rca: 'Caller access', trigger: 'Trigger' };
+function evidenceLinks(f) {
+  const refs = (f.evidence || []).map(e => ({ id: e.id, table: evidenceTable(last?.ev, e.table), label: e.label || EV_LABEL[e.table] || 'Record' })).filter(e => e.table && e.id);
+  if (!refs.length) return '';
+  const total = refs.reduce((m, e) => ((m[e.label] = (m[e.label] || 0) + 1), m), {});
+  const seen = {};
+  return `<div class="ev-links">${refs.slice(0, 6).map(e => {
+    const n = (seen[e.label] = (seen[e.label] || 0) + 1);
+    return `<a href="#" data-open="${esc(e.table)}|${esc(e.id)}" title="Open ${esc(e.table)} record">${esc(e.label)}${total[e.label] > 1 ? ' ' + n : ''} ↗</a>`;
+  }).join('')}</div>`;
 }
 
 const val = (row, f) => { const x = row?.[f]; return x && typeof x === 'object' && 'display_value' in x ? (x.display_value || x.value) : x; };
@@ -409,7 +454,7 @@ $('btnPage').addEventListener('click', async () => {
   $('q').value = p.sysId;
   run(col => col.trace(tab.url));
 });
-$('btnRecent').addEventListener('click', () => run(col => col.recentRuns(20)));
+$('btnRecent').addEventListener('click', () => run(col => col.recentFailures({ days: 7 })));
 $('btnSettings').addEventListener('click', () => $('settings').classList.toggle('hidden'));
 for (const id of ['setWindow', 'setRows', 'setStuck', 'setRedact', 'setBodies', 'setActions', 'setKey', 'setModel', 'setClaudeBodies', 'setAsk']) $(id).addEventListener('change', saveSettings);
 $('btnCopy').addEventListener('click', copyReport);

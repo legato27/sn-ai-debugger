@@ -4,27 +4,39 @@ The rule ID shows under each finding in the panel. Rules live in [`lib/rules.js`
 
 **Root-cause ranking.** Findings are sorted by severity, but the "Most likely root cause" is chosen by how close a rule usually sits to the cause (for example, `TOOL-INPUT-CASE` before `TOOL-ERR` before `PLAN-FAIL`). Up to three other close candidates appear under "Also check".
 
+**Evidence links.** Each finding shows chips for the records it was raised from (tool execution, Gen AI log entry, ACL, system log row…). Click one to open the record; the Markdown report lists the root cause's records.
+
+**Only the run's own logs count.** Logs are collected by time window, so they include every job and user on the instance. A log line or flow counts for SYSLOG-ACL, SYSLOG-RUN, FLOW-ERR and FLOW-WAIT only when it names a record of the run (in the message, or `context_map.record_sys_id` / `_script_record`) or was written in the session of one of the run's users (`sys_created_by` / `context_map._user`, not `system`). The rest is grouped in the panel's **Background** card.
+
+**Skill rules report per skill.** The SKILL-* grounding rules check every LLM call in the trace that did not error, but report once per skill with a count ("1 of 4 LLM calls"), not once per call.
+
 | Rule ID | Severity | Fires when | First fix |
 | --- | --- | --- | --- |
 | TOOL-DEP-BROKEN | Critical | A tool points to a script include, flow or action that is missing or unreadable | Restore or re-point it; check the update set |
+| PLAN-SECURITY | High | The plan was terminated with state reason Security Violation (the detail names the access-check task, run type and record) | Find which access the run's identity lacks: workflow or agent ACL, a tool's ACL, or the record; test as that identity |
 | TOOL-MISSING | Critical | An agent's tool binding points to a tool that can't be read | Re-bind or restore the tool |
 | TOOL-ERR | Critical | A tool execution failed or logged an error | Run the script or subflow with the same input and fix it |
 | TASK-FAIL | Critical | An execution task failed | Open its tool executions |
-| PLAN-FAIL | Critical | The plan ended failed or cancelled | Usually a symptom; fix the first failing step |
-| GENAI-ERR | Critical | An LLM call failed (hints for resolveModelConfig/OneExtend, throttling, timeout, context length, guardrail) | Follow the hint |
+| PLAN-FAIL | Critical | The plan ended failed, cancelled or terminated, or its state reason is a failure (planning, execution, security) | Usually a symptom; fix the first failing step |
+| GENAI-ERR | Critical | An LLM call failed (hints for resolveModelConfig/OneExtend, throttling, timeout, context length, guardrail; shows the error code and model when logged) | Follow the hint |
 | TOOL-INPUT-CASE | High | An input name differs from the tool's declared input only by case | Align names in the tool and the instructions |
 | TOOL-EMPTY | High | A tool succeeded but returned an empty result | Impersonate the run-as user; check ACLs; use GlideRecordSecure |
 | ACL-ROLEGAP | High | The run-as user (or you) has none of the roles on the agent's ACL | Grant the minimum role or correct the ACL |
-| SYSLOG-ACL | High | Access-denied messages in the system log during the run | Grant the access, or approve the cross-scope call |
+| SYSLOG-ACL | High | Access-denied messages in the system log during the run, written by the run's own users | Grant the access, or approve the cross-scope call |
 | SYSLOG-TOOL | High | System log errors name the agent's tools or scripts | Fix the script error |
 | RCA-DENIED | High | A restricted caller access record is denied or pending | Approve it if intended, or move the code |
 | SUPERVISED-UNATTENDED | High | A supervised tool on a triggered or background run | Make it autonomous or use an approval flow |
-| PLAN-STUCK | High | Plan in a non-final state past the stuck threshold | Check tasks, flows and plugin versions |
+| PLAN-STUCK | High | Plan in a non-final state past the stuck threshold (not `awaiting_input`, which waits on the user) | Check tasks, flows and plugin versions |
 | PLAN-NOTASKS | High | No execution tasks were created | Check the agent's active flag, ACL and description |
 | GENAI-EMPTY | High | LLM returned a blank response with no error | Check AI Guardian and grounding fields |
 | GUARD | High | AI Guardian flagged or blocked a call | Review the input and the guardrail mode |
+| SKILL-NO-INPUT | High | A short LLM reply asks for input instead of answering ("Kindly check if attachments are present", "No documents were provided"). The detail shows the run's own errors in the 10 s before and how many of the skill's last 20 calls gave the same reply | Fix what the skill reads: the record's fields or attachment, the skill's inputs and tools. An `FDIH` error just before means a flow or action tool failed |
+| SKILL-NO-ANSWER | High (Medium when the skill gives this reply on every call) | A short LLM reply only acknowledges the instructions or refuses ("Understood. I will respond only in English.") | Fix the skill it calls first if that one had no input; otherwise the data part of the prompt is empty |
+| SYSLOG-RUN | High | Errors in the system log that name a record of the run or come from its users' sessions (any source, including Group Action Framework `sn-gaf`) | Read them with the timeline; the first one is usually the cause |
+| SKILL-PLACEHOLDER | High | The final prompt of an LLM call that did not error still contains template variables such as `{{incident.short_description}}` | Fix the skill input or tool that supplies the variable (names are matched exactly); compare with the Skill Kit test's Grounded prompt tab |
+| SKILL-TRUNCATED | High | The response used the prompt config's max tokens, or the output metadata says the model stopped for length | Raise max tokens in the skill prompt configuration, or ask for a shorter output |
 | HTTP-ERR | High | Outbound HTTP calls failed during the run | Check credentials, endpoint, MID Server |
-| FLOW-ERR | High | A flow or subflow failed during the run | Open the flow execution details |
+| FLOW-ERR | High | A flow or subflow behind one of the run's tools failed | Open the flow execution details |
 | AGENT-INACTIVE | High | The agent is inactive | Activate it or remove it from the workflow |
 | TOOL-INACTIVE | High | A bound tool or its binding is inactive | Activate it |
 | TOOL-DEP-INACTIVE | High | A tool's script, flow or action is inactive | Activate it |
@@ -43,17 +55,19 @@ The rule ID shows under each finding in the panel. Rules live in [`lib/rules.js`
 | LOOP-MSG | Medium | Same agent message 3+ times | Pre-fill from context; add a completion condition |
 | VA-REASK | Medium | Virtual Agent sent the same message 3+ times | Make the topic or agent use the answer it has; add a fallback after two tries |
 | TOOL-SLOW | Medium | A tool took more than 30 seconds | Progress message, async, or a narrower query |
-| FLOW-WAIT | Medium | A subflow is waiting | Return an interim result or notify on completion |
-| SYSLOG-AI | Medium | AI framework errors in the system log | Read them against the plan timeline |
+| FLOW-WAIT | Medium | A subflow behind one of the run's tools is waiting | Return an interim result or notify on completion |
+| SKILL-EMPTY-GROUNDING | Medium | A labelled grounding field in the final prompt holds a no-data value (`null`, `[]`, `N/A`…), or is blank at the end of the prompt or just before such a field. Section headers, output templates and instruction headers are not reported | Check the record's field, the skill input mapping and the tool behind that section |
 | GENAI-NONE | Medium | No Gen AI log rows were found | Widen the window or use an HR admin |
 | KILLSWITCH-OFF | Low | `kill_switch.mode` is `off` | Set it to `warn_only` (default) or `enforce` |
 | ADMIN | Info | You are tracing as admin | Reproduce as the run-as user |
+| FLOW-NEARBY | Info | Flows failed or waited in the run's time window but are not behind any of its tools (summarised once) | Usually other work on the instance; ignore unless the agent calls one indirectly |
+| SKILL-QUICKMODE | Info | A skill is involved and `com.glide.oneapi.fdih.async.quick.mode` is true, so skill flows record no execution details | Set it to false and turn on flow reporting while you debug |
 | DICT | Info | The data dictionary is not readable | Trace with a user who can read it |
 | RELEASE-UNKNOWN | Info | The instance release could not be read from `sys_properties` | Trace with a user that can read it; release-specific rules use conservative severities |
 | VA-NOLINK | Info | No Virtual Agent conversation is linked to the plan | Trace the conversation sys_id directly |
 
 ## Adding a rule
 
-1. Add a block to `runRules()` in `lib/rules.js` that reads from `ev.norm` (normalised plan, tasks, messages, toolExecs, genaiLogs, syslog, http, flows, rca, agents, tools, skills, conversation, vaMessages) and calls `add(id, severity, category, title, detail, fix, evidence)`.
+1. Add a block to `runRules()` in `lib/rules.js` that reads from `ev.norm` (normalised plan, tasks, messages, toolExecs, genaiLogs, promptConfigs, syslog, http, flows, rca, agents, tools, skills, conversation, vaMessages) and calls `add(id, severity, category, title, detail, fix, evidence)`. Pass `evidence` as `[{ table: <norm key or real table>, id }]` so the finding gets record links. A rule that can fire on many LLM calls should report once per skill with a count, as the SKILL-* rules do.
 2. If it is a likely cause rather than a symptom, give it a low number in `CAUSAL_RANK`.
 3. Add fixture data to `test/mock-instance.mjs` and an assertion to `test/collect-and-rules.test.mjs`, then run `npm test`.

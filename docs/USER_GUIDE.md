@@ -61,9 +61,9 @@ The fastest way in is to open the failing record in ServiceNow and click **Use t
 
 There are three ways to start:
 
-1. **Use this page** traces the record open in the current tab. Classic forms, Next Experience URLs and workspace record URLs all work.
+1. **Use this page** traces the record open in the current tab. Classic forms, Next Experience URLs and workspace record URLs all work. In a workspace sub-record (for example evidence inside an ER case), it traces the record on screen and keeps the parent as context. On a business record such as an incident, HR case or evidence, it shows **Otto activity on this record**: every skill call linked to it (Summarize, Refine…), the nested calls a wrapper skill makes, and agent runs about it.
 2. **Trace** takes whatever you type in the box: a sys_id, a record URL, a plan number or part of a name. Press Enter or click the button.
-3. **Recent runs** lists the latest 20 execution plans. Click **Trace** next to the one you want.
+3. **Recent failures** lists what went wrong in the last 7 days: failed, terminated or stuck execution plans (with the platform's state reason, such as Security Violation), and failed or user-rejected LLM calls (skills included), newest first, each with its reason. Repeats of the same failure are merged into one line with a count (×41), named after the workflow or agent. Click **Trace** next to one. If nothing failed, it lists the latest runs instead.
 
 What each input traces:
 
@@ -74,14 +74,15 @@ What each input traces:
 | AI agent sys_id or name | Agent configuration, tool bindings and what each tool calls, ACLs, run-as roles, workflows that use the agent, recent plans, and description overlap with other active agents |
 | Agentic workflow sys_id or name | Team agents with their configuration, triggers, recent plans |
 | Tool sys_id or name | The script include, flow or action behind it, the agents it is bound to, recent executions |
-| Now Assist skill or prompt sys_id or name | Related prompt and capability records, recent Gen AI log runs of the skill, usage count, system log around the latest run |
+| Now Assist / ServiceNow Otto skill or prompt sys_id or name | Related prompt and capability records, recent Gen AI log runs of the skill with model and token counts, the prompt config's token limit, usage count, system log around the latest run |
 | Gen AI log sys_id | The call, its skill and prompt records, logs around it |
+| Business record (incident, HR case, evidence…) URL or sys_id | Skill calls linked to it through the Gen AI log's `metadata_document`, nested skill calls by the same user at the same moment, agent runs with it as `related_task_record` (including the parent record in a workspace URL), the skills involved, and the system log around the latest call |
 | VA conversation sys_id | The plans in that conversation; traces the latest |
 | Any other text | Name search across agents, workflows, tools, skills and plans; pick a match to trace it |
 
 A typical plan trace makes 60 to 80 read-only calls and finishes in a few seconds. The progress line under the buttons shows what it is doing and the call count when done.
 
-Tip: start from the **execution plan** whenever you can. It is the only entry point that ties config, run and logs together. When a user reports "the agent didn't work", use **Recent runs** or trace the agent and pick its latest plan.
+Tip: start from the **execution plan** whenever you can. It is the only entry point that ties config, run and logs together. When a user reports "the agent didn't work", use **Recent failures** or trace the agent and pick its latest plan.
 
 ## Read the results
 
@@ -93,7 +94,8 @@ Read the panel top to bottom: the root cause card tells you what to fix first, a
 | Matches | Candidates from a name search | Click **Trace** on the right one |
 | Traced | Record type, display value, table, and the UTC log window used | Check it traced what you meant |
 | Most likely root cause | The finding closest to the cause, with detail and a fix | Start here. **Also check** lists up to three other likely causes, because a run can fail for more than one reason |
-| Findings | Every rule that fired, sorted by severity | Click a severity chip to hide or show that level |
+| Findings | Every rule that fired, sorted by severity, with chips for the records each was raised from | Click a severity chip to hide or show that level; click a record chip (for example **Tool execution ↗**) to open it |
+| Recent failures | Failed or stuck plans and failed or rejected LLM calls from the last 7 days | Click **Trace** on one to drill in |
 | Execution plans | Recent plans for an agent, workflow or conversation | Click **Trace** to drill into one run |
 | AI app versions | Scope, version and active state of the AI store apps | Compare with the store and your patch level |
 | Evidence | One expandable group per table read, with row count and status | Click a record name to open it in a new tab; expand **fields** to see the raw values |
@@ -108,7 +110,9 @@ The **Conversation timeline** card puts the whole run in time order, so you can 
 | Task | Grey | Each execution task and its state |
 | Tool call | Grey | Tool name, input, output, state and duration |
 | LLM call | Grey | Skill or source, the model's response and state |
-| Error | Red | Error-level system log lines and failed flows during the run |
+| Error | Red | Error-level system log lines and failed flows from this run: they name one of its records or come from its users' sessions. The same error repeated shows once with a count (×N) |
+
+Errors from other jobs and users in the same minutes are left out of the timeline and the findings. The collapsed **Background** card below it groups them by source and message with a count, so you can still see them. On a busy instance that is hundreds of lines a minute.
 
 Click a name to open that record in a new tab. Long text folds; click it to expand. If the plan has no linked conversation (a triggered run, or a test in AI Agent Studio), the card says so and shows the rest of the run. To start from the conversation instead, paste its sys_id: the trace reads the transcript and then the latest plan in it.
 
@@ -197,9 +201,16 @@ The stop card adds **Deactivate trigger** for workflows, which does what the Kil
 
 Each playbook names the symptom, where to start, and which findings to look for.
 
+### The run was terminated for a Security Violation
+
+1. Pick it from **Recent failures** or trace the plan.
+2. **PLAN-SECURITY** names the access-check task, the run type (a triggered run executes without a person in a chat) and the record the run was about.
+3. Check, as the identity the run executes as: the workflow and agent ACLs (**AI-ACL-MISSING**), the tools' ACLs, and read access to that record. HR tables need HR roles.
+4. Use AI Agent Studio **Test access** or Access Analyzer as that identity. A test as admin passes and proves nothing.
+
 ### The plan is stuck or never finishes
 
-1. Trace the plan (**Recent runs** if you don't have the sys_id).
+1. Trace the plan (**Recent failures** if you don't have the sys_id).
 2. Look for **PLAN-STUCK** and **PLAN-NOTASKS**. No tasks means the orchestrator never handed the work to an agent.
 3. With no tasks: check **AGENT-INACTIVE**, **ACL-ROLEGAP** and **DESC-OVERLAP**, then the AI app versions card against the store.
 4. With tasks: check **SUPERVISED-UNATTENDED** (a tool waiting for an approval nobody will give) and **FLOW-WAIT** (a subflow waiting).
@@ -223,6 +234,19 @@ Each playbook names the symptom, where to start, and which findings to look for.
 2. **GENAI-ERR** includes a targeted hint. `resolveModelConfig` or OneExtend errors point at capability routing and plugin versions, which have broken after platform hotfixes before. Throttling, timeout and context-length errors each get their own hint.
 3. **GENAI-EMPTY** or **GUARD** suggest AI Guardian blocked the response or the grounding fields were empty.
 4. **GENAI-NONE** means no log rows were found. Widen the log window, or re-run as a user who can read HR log entries.
+
+### A skill gives a wrong, vague or cut-off answer
+
+The call succeeded, so nothing errors. The problem is usually what went into the prompt, or how much room the answer had.
+
+1. Trace the skill (or pick the rejected call from **Recent failures**, or use **Use this page** on the record).
+2. **SKILL-NO-INPUT** means the model replied with a request for input ("Kindly check if attachments are present") instead of an answer. The finding shows the errors the same session logged just before it and how often the skill does this. An `FDIH` error there means a flow or action the skill runs as a tool failed.
+3. **SKILL-NO-ANSWER** means the reply only acknowledged the instructions ("Understood. I will respond only in English."). When a wrapper skill does this on every call, it is Medium and points at the skill it calls.
+4. **SKILL-PLACEHOLDER** means template variables such as `{{incident.short_description}}` reached the model unfilled. Fix the skill input or tool name; they are matched exactly.
+5. **SKILL-EMPTY-GROUNDING** means a labelled section of the prompt arrived empty. Check the record and the tool behind that section.
+6. **SKILL-TRUNCATED** means the answer hit the prompt config's max tokens. Raise the limit or ask for a shorter output.
+7. If the skill uses a flow tool and **SKILL-QUICKMODE** shows, flow failures are invisible until you turn quick mode off.
+8. Confirm the fix with a Skill Kit test on the same record and read its Grounded prompt tab.
 
 ### The orchestrator picks the wrong agent, or none
 
@@ -296,7 +320,7 @@ The report also includes the first 60 timeline entries with time, event, who, an
 
 ## Rules reference
 
-The extension ships with 40 rules. The rule ID shows under each finding, so you can look it up here.
+The rule ID shows under each finding. The most common rules are below; the full list of 53 is in the [Rules reference](RULES.md).
 
 | Rule ID | Severity | Fires when | First fix |
 | --- | --- | --- | --- |
@@ -304,7 +328,8 @@ The extension ships with 40 rules. The rule ID shows under each finding, so you 
 | TOOL-MISSING | Critical | An agent's tool binding points to a tool that can't be read | Re-bind or restore the tool |
 | TOOL-ERR | Critical | A tool execution failed or logged an error | Run the script or subflow with the same input and fix it |
 | TASK-FAIL | Critical | An execution task failed | Open its tool executions |
-| PLAN-FAIL | Critical | The plan ended failed or cancelled | Usually a symptom; fix the first failing step |
+| PLAN-FAIL | Critical | The plan ended failed, cancelled or terminated | Usually a symptom; fix the first failing step |
+| PLAN-SECURITY | High | The plan was terminated for a Security Violation | Find the access the run's identity lacks; test as that identity |
 | GENAI-ERR | Critical | An LLM call failed (hints for resolveModelConfig, throttling, timeout, context length, guardrail) | Follow the hint |
 | TOOL-INPUT-CASE | High | An input name differs from the tool's declared input only by case | Align names in the tool and the instructions |
 | TOOL-EMPTY | High | A tool succeeded but returned an empty result | Impersonate the run-as user; check ACLs; use GlideRecordSecure |
@@ -333,10 +358,21 @@ The extension ships with 40 rules. The rule ID shows under each finding, so you 
 | LOOP-MSG | Medium | Same message 3+ times | Pre-fill from context; add a completion condition |
 | TOOL-SLOW | Medium | A tool took more than 30 seconds | Progress message, async, or a narrower query |
 | FLOW-WAIT | Medium | A subflow is waiting | Return an interim result or notify on completion |
-| SYSLOG-AI | Medium | AI framework errors in the system log | Read them against the plan timeline |
+| SYSLOG-RUN | High | Errors in the system log from this run's records or users' sessions | Read them with the timeline |
 | GENAI-NONE | Medium | No Gen AI log rows were found | Widen the window or use an HR admin |
 | ADMIN | Info | You are tracing as admin | Reproduce as the run-as user |
 | DICT | Info | The data dictionary is not readable | Trace with a user who can read it |
+
+Skill rules (unreleased):
+
+| Rule ID | Severity | Fires when | First fix |
+| --- | --- | --- | --- |
+| SKILL-NO-INPUT | High | The skill replied with a request for input instead of an answer | Fix what the skill reads; check the error just before it |
+| SKILL-NO-ANSWER | High / Medium | The reply only acknowledged the instructions | Fix the skill it calls first, or the empty data part of the prompt |
+| SKILL-PLACEHOLDER | High | Template variables such as `{{incident.short_description}}` remain in the final prompt | Fix the skill input or tool that supplies them |
+| SKILL-TRUNCATED | High | The answer hit the prompt config's max tokens | Raise the limit or ask for a shorter output |
+| SKILL-EMPTY-GROUNDING | Medium | A labelled grounding field arrived empty | Check the record field and the tool behind it |
+| SKILL-QUICKMODE | Info | Skill flows record no execution details | Turn quick mode off while you debug |
 
 Conversation rules (added in 0.3.0):
 
@@ -377,9 +413,9 @@ To see what the panel is doing, right-click inside it, choose **Inspect**, and w
 
 ## Limits and safe use
 
-This is version 0.5.0. It has been tested against a mock instance, not yet against a live AI Agent Studio instance, so treat its findings as leads to confirm.
+This is version 0.5.0. It has been tested against a mock instance and checked read-only against one live Australia patch 7 instance. Treat its findings as leads to confirm.
 
-- **Table names.** These are documented by ServiceNow (Australia): `sn_aia_execution_plan`, `sn_aia_execution_task`, `sn_aia_message`, `sn_aia_agent`, `sn_aia_agent_tool_m2m`, `sn_aia_team_member`, `sn_aia_trigger_configuration`, `sys_generative_ai_config`, `sys_generative_ai_log`, `sys_gen_ai_usage_log`, `sys_one_extend_capability`. These are best guesses, checked on each trace and skipped if absent: `sn_aia_usecase`, `sn_aia_tool`, `sn_aia_tools_execution`, `sn_nowassist_skill_config`, `sys_cs_conversation` (and its message table, usually sys_cs_message), `sys_outbound_http_log`, `sys_flow_context`, `sys_restricted_caller_access`.
+- **Table names.** These are documented by ServiceNow (Australia): `sn_aia_execution_plan`, `sn_aia_execution_task`, `sn_aia_message`, `sn_aia_agent`, `sn_aia_agent_tool_m2m`, `sn_aia_team_member`, `sn_aia_trigger_configuration`, `sys_generative_ai_config`, `sys_generative_ai_log`, `sys_gen_ai_usage_log`, `sys_one_extend_capability`. These are best guesses, checked on each trace and skipped if absent: `sn_aia_usecase`, `sn_aia_tool`, `sn_aia_tools_execution`, `sn_nowassist_skill_config`, `sys_cs_conversation` (and its message table, usually sys_cs_message), `sys_outbound_http_log`, `sys_flow_context`, `sys_restricted_caller_access`. The skill table is read from the Gen AI log's dictionary when it can be, so `sn_nowassist_skill_config` is only the fallback.
 - **ACL check is role-only.** It does not evaluate ACL conditions or scripts.
 - **ACL lookup is by name.** It finds ACLs whose name contains the agent's sys_id or internal name; ACLs configured another way won't show.
 - **AI Guardian tables** are found by name (`guardrail`, `guardian`). If detections live elsewhere on your release, they won't appear.
