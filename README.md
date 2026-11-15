@@ -13,6 +13,8 @@ A Chrome side panel that finds out why a ServiceNow AI Agent run, agentic workfl
 - **Shows what Otto did on a record.** On an incident, HR case or evidence record (workspace sub-records included), it lists every skill call made on it, such as Summarize and Refine, the nested calls a wrapper skill makes, and the agent runs about it.
 - **Finds the failures for you.** **Recent failures** lists failed or stuck agent runs and failed or user-rejected skill calls from the last 7 days, each with its reason, including runs the platform terminated for Security Violation or Execution Failed. Repeats are merged with a count.
 - **Ranks root causes.** 53 rules (tool input casing mismatches, empty tool results, ACL role gaps, broken script includes, supervised tools on unattended runs, LLM errors, unfilled prompt variables, answers cut off at the token limit, skill replies that ask for missing input instead of answering, stuck plans, overlapping agent descriptions, re-ask loops and more). A failed plan is treated as a symptom: the rule closest to the cause wins. Every finding links to the records it was raised from.
+- **Gets the run's logs out fast.** A **Run logs** card lists every log line from the run at every level (error, warning, info, debug), oldest first, with level filters, a text filter, **Copy** for a ticket, and **Open in System Log** to continue in the platform list with the same filter.
+- **Easy to move around.** A jump bar in the header goes straight to the root cause, findings, timeline, logs or evidence. Right-click a ServiceNow page, a link or a selected sys_id to trace it, or press Alt+Shift+U. Flow executions open in Flow Designer's execution view.
 - **Separates the run from the noise.** Logs are matched by time, and a busy instance logs hundreds of errors a minute. Only lines that name a record of the run or come from its users' sessions count; the rest are grouped in a collapsed **Background** card.
 - **Release-aware (Brazil ready).** Reads the instance release and patch, checks the deny-by-default ACLs Brazil introduced for agents, workflows, skills, flows and flow actions, and spots runaway triggers and Kill Switch disables.
 - **Shows the conversation as the user lived it.** One timeline merges the Virtual Agent transcript, agent messages, tasks, tool calls, LLM calls and errors.
@@ -36,9 +38,10 @@ Works on `*.service-now.com` and `*.servicenowservices.com`. For a custom domain
 ## Quick start
 
 1. Open a failed execution plan (or an agent, tool or skill) in ServiceNow.
-2. Click **Use this page**. Or paste a sys_id, URL or name and click **Trace**, or pick from **Recent failures**.
-3. Read **Most likely root cause** first, then **Also check**, the findings and the timeline.
-4. Use **Copy report** to paste the result into an incident or a support case.
+2. Click **Use this page** (or right-click the page and choose **Trace this page with AI Debugger**, or press Alt+Shift+U). Or paste a sys_id, URL or name and click **Trace**, or pick from **Recent failures**.
+3. Read **Most likely root cause** first, then **Also check**, the findings and the timeline. Use the jump bar under the title to move between them.
+4. Open **Logs** for the run's own log lines; **Copy** them or **Open in System Log**.
+5. Use **Copy report** to paste the result into an incident or a support case.
 
 Full instructions: [User guide](docs/USER_GUIDE.md) · [Rules reference](docs/RULES.md) · [Architecture](docs/ARCHITECTURE.md)
 

@@ -16,6 +16,7 @@
       </div>
     </div>
     <button class="icon" id="btnSettings" title="Settings" aria-label="Settings">⚙</button>
+    <nav id="jump" class="jump hidden" aria-label="Jump to section"></nav>
   </header>
 
   <section id="settings" class="card hidden" aria-label="Settings">
@@ -28,6 +29,9 @@
     <h2 class="sub-h">Stop actions (optional)</h2>
     <label class="chk"><input type="checkbox" id="setActions"> Offer "stop" scripts for runs, stuck runs and agents</label>
     <p class="hint">The extension never runs them. It opens Scripts - Background with the script filled in, in dry-run mode, and you click Run. Needs admin on the instance.</p>
+    <h2 class="sub-h">Keyboard shortcuts</h2>
+    <p class="hint" id="keys">Loading…</p>
+    <button id="btnKeys" title="Opens chrome://extensions/shortcuts">Change shortcuts</button>
     <h2 class="sub-h">Claude analysis (optional)</h2>
     <label>Anthropic API key <input type="password" id="setKey" placeholder="sk-ant-…" autocomplete="off" spellcheck="false"></label>
     <label>Model <select id="setModel"></select></label>
@@ -43,7 +47,7 @@
     </div>
     <div class="row buttons">
       <button id="btnTrace" class="primary">Trace</button>
-      <button id="btnPage" title="Trace the record open in the current tab">Use this page</button>
+      <button id="btnPage" title="Trace the record open in the current tab. Also on the right-click menu of ServiceNow pages.">Use this page</button>
       <button id="btnRecent" title="Failed or stuck agent runs and failed or rejected skill calls from the last 7 days">Recent failures</button>
     </div>
     <div id="perm" class="hint hidden">This domain is not a *.service-now.com host. <button id="btnGrant" class="link">Allow this domain</button></div>

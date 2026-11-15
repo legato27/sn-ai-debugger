@@ -1,7 +1,8 @@
 import { makeTabClient } from './lib/sn-client.js';
 import { Collector, parseSnUrl } from './lib/collectors.js';
 import { runRules, SEVERITY } from './lib/rules.js';
-import { redactEvidence } from './lib/redact.js';
+import { redactEvidence, redactText } from './lib/redact.js';
+import { runLogs, filterLogs, countByGroup, logsAsText, levelName, LOG_GROUPS, GROUP_LABEL, recordUrl, logListUrl } from './lib/logs.js';
 import { toMarkdown, evidenceTable } from './lib/report.js';
 import { DEFAULT_SETTINGS, KIND_LABEL } from './lib/config.js';
 import { KIND_LABEL as TL_LABEL } from './lib/timeline.js';
@@ -17,6 +18,8 @@ let claude = null;        // ClaudeSession for the current trace
 let tab = null;
 let last = null;          // { ev, rca }
 let sevFilter = new Set(SEVERITY);
+let logGroups = new Set(LOG_GROUPS);   // Run logs level pills
+let logQuery = '';                     // Run logs text filter
 let busy = false;
 
 // ---------------- settings ----------------
@@ -76,7 +79,7 @@ async function run(fn) {
   if (busy) return;
   if (!(await refreshTab())) return;
   busy = true; await refreshTab();
-  $('out').innerHTML = '';
+  $('out').innerHTML = ''; renderJump();
   const t0 = performance.now();
   try {
     const client = makeTabClient(tab.id);
@@ -84,7 +87,8 @@ async function run(fn) {
     progress('Collecting evidence…');
     const ev = await fn(col);
     const rca = runRules(ev, { stuckMinutes: settings.stuckMinutes });
-    last = { ev, rca };
+    last = { ev, rca, logs: runLogs(ev.norm) };
+    logQuery = '';
     claude?.stop(); claude = null; actionView = null;
     claudeState = { phase: 'idle', error: '', consent: false, streaming: '', pendingQ: '' };
     render(ev, rca);
@@ -131,7 +135,7 @@ function render(ev, rca) {
 
   if (ev.recordActivity?.length) {
     const list = ev.recordActivity;
-    out.push(`<section class="card"><h2>Otto activity on this record (${list.length})</h2>
+    out.push(`<section class="card" id="sec-activity" data-jump="Activity ${list.length}"><h2>Otto activity on this record (${list.length})</h2>
       <div class="hint">Skill calls linked to the record, newest first${list.some(x => x.nested) ? ', plus calls made with the latest one (same user, same moment) that a wrapper skill logs without the record' : ''}.</div>
       ${list.slice(0, 25).map(x => `
       <div class="list-item"><div><div>${esc(x.display)}${x.nested ? ' <span class="badge" title="Logged without the record, matched by user and time">nested</span>' : ''}</div>
@@ -142,7 +146,7 @@ function render(ev, rca) {
 
   if (rca.rootCause) {
     const f = rca.rootCause;
-    out.push(`<section class="card root-cause"><h2>Most likely root cause</h2>
+    out.push(`<section class="card root-cause" id="sec-cause" data-jump="Cause"><h2>Most likely root cause</h2>
       <div class="rc-title"><span class="sev ${f.severity}">${f.severity}</span>${esc(f.title)}</div>
       ${f.detail ? `<div class="fd">${esc(f.detail)}</div>` : ''}
       ${f.fix ? `<div class="fx"><b>Fix:</b> ${esc(f.fix)}</div>` : ''}
@@ -153,7 +157,7 @@ function render(ev, rca) {
 
   if (ev.root || rca.findings.length) {
     const counts = Object.fromEntries(SEVERITY.map(s => [s, rca.findings.filter(f => f.severity === s).length]));
-    out.push(`<section class="card"><h2>Findings (${rca.findings.length})</h2>
+    out.push(`<section class="card" id="sec-findings" data-jump="Findings ${rca.findings.length}"><h2>Findings (${rca.findings.length})</h2>
       <div class="filters">${SEVERITY.filter(s => counts[s]).map(s => `<button data-sev="${s}" class="${sevFilter.has(s) ? 'on' : ''}">${s} ${counts[s]}</button>`).join('')}</div>
       <div id="findings">${findingsHtml(rca.findings)}</div></section>`);
   }
@@ -161,7 +165,7 @@ function render(ev, rca) {
   if (ev.timeline?.length) {
     const tl = ev.timeline;
     const conv = ev.norm?.conversation;
-    out.push(`<section class="card"><h2>Conversation timeline (${tl.length})</h2>
+    out.push(`<section class="card" id="sec-timeline" data-jump="Timeline ${tl.length}"><h2>Conversation timeline (${tl.length})</h2>
       ${conv ? `<div class="hint">VA conversation · ${esc(conv.deviceType || '')} ${esc(conv.state || '')}</div>` : `<div class="hint">No Virtual Agent transcript linked; showing agent messages, tool and LLM calls.</div>`}
       ${ev.background?.total && !tl.some(e => e.kind === 'error') ? `<div class="hint">No system log error came from this run. ${ev.background.total} errors from other jobs and users in the same minutes are under Background.</div>` : ''}
       <div class="timeline">${tl.slice(0, 300).map(e => `<div class="tl ${esc(e.kind)}">
@@ -172,21 +176,23 @@ function render(ev, rca) {
         ${e.error ? `<div class="tl-e">${esc(e.error)}</div>` : ''}</div>`).join('')}</div></section>`);
   }
 
+  out.push(runLogsCard(ev));
+
   const bg = ev.background;
   if (bg && (bg.total || bg.flows)) {
-    out.push(`<section class="card background"><details><summary>Background: ${bg.total} error${bg.total === 1 ? '' : 's'}${bg.flows ? ` and ${bg.flows} failed or waiting flows` : ''} not from this run <span class="count">${bg.groups.length} kinds</span></summary>
+    out.push(`<section class="card background" id="sec-background" data-jump="Background ${bg.total}"><details><summary>Background: ${bg.total} error${bg.total === 1 ? '' : 's'}${bg.flows ? ` and ${bg.flows} failed or waiting flows` : ''} not from this run <span class="count">${bg.groups.length} kinds</span></summary>
       <div class="hint">Logged in the same minutes by other jobs and users. None names a record of this run or comes from its users' sessions, so they are left out of the findings and the timeline.</div>
       ${bg.groups.slice(0, 15).map(g => `<div class="bg-row"><span class="badge">×${g.count}</span> <a href="#" data-open="syslog|${esc(g.id)}">${esc(g.source)}</a> <span class="tl-c">${esc(g.text)}</span></div>`).join('')}
       ${bg.groups.length > 15 ? `<div class="hint">…and ${bg.groups.length - 15} more kinds.</div>` : ''}</details></section>`);
   }
 
-  if (ev.root) out.push('<section class="card claude" id="claudeCard"></section>');
+  if (ev.root) out.push('<section class="card claude" id="claudeCard" data-jump="Claude"></section>');
   if (ev.root) out.push('<section class="card actions hidden" id="actionsCard"></section>');
 
   if (ev.recentFailures) {
     const days = ev.meta.failureWindow?.days ?? 7;
     const list = ev.recentFailures;
-    out.push(`<section class="card"><h2>Recent failures (${list.length}${list.length > 25 ? ', newest 25' : ''})</h2>
+    out.push(`<section class="card" id="sec-failures" data-jump="Failures ${list.length}"><h2>Recent failures (${list.length}${list.length > 25 ? ', newest 25' : ''})</h2>
       ${list.length ? list.slice(0, 25).map(x => `
       <div class="list-item"><div><div>${esc(x.display)}${x.count > 1 ? ` <span class="badge" title="Same failure ${x.count} times; the newest is traced">×${x.count}</span>` : ''}</div><div class="meta">${esc(x.label)} · ${x.count > 1 ? 'latest ' : ''}${esc(x.created || '')}</div><div class="meta warn">${esc(x.reason)}</div></div>
       <button data-trace="${esc(x.id)}">Trace</button></div>`).join('')
@@ -194,7 +200,7 @@ function render(ev, rca) {
   }
 
   if (ev.recentPlans?.length) {
-    out.push(`<section class="card"><h2>${ev.recentFailures ? 'Latest runs' : 'Execution plans'}</h2>${ev.recentPlans.slice(0, 15).map(p => `
+    out.push(`<section class="card" id="sec-runs" data-jump="${ev.recentFailures ? 'Latest runs' : 'Plans'}"><h2>${ev.recentFailures ? 'Latest runs' : 'Execution plans'}</h2>${ev.recentPlans.slice(0, 15).map(p => `
       <div class="list-item"><div><div>${esc(p.display)}</div><div class="meta">${esc(p.state || '')} · ${esc(p.created || '')}</div></div>
       <button data-trace="${esc(p.id)}">Trace</button></div>`).join('')}</section>`);
   }
@@ -206,15 +212,120 @@ function render(ev, rca) {
 
   const secs = (ev.sections || []).filter(s => s.key !== 'plugins');
   if (secs.length) {
-    out.push(`<section class="card"><h2>Evidence</h2>${secs.map((s, i) => `
+    out.push(`<section class="card" id="sec-evidence" data-jump="Evidence"><h2>Evidence</h2>${secs.map((s, i) => `
       <details><summary>${esc(s.title)} <span class="count">${s.rows.length}</span>${s.status && s.status !== 'ok' ? ` <span class="bad">${esc(s.status)}</span>` : ''}</summary>
       <div class="meta hint">${esc(s.table)}${s.via ? ' · via ' + esc(s.via) : ''}${s.note ? ' · ' + esc(s.note) : ''}${s.error ? ' · ' + esc(s.error) : ''}</div>
       ${rowsTable(s, i)}</details>`).join('')}</section>`);
   }
   $('out').innerHTML = out.join('');
+  renderLogRows();
   renderClaude();
   renderActions();
+  renderJump();
 }
+
+// ---------------- run logs ----------------
+
+// Every log line from the run, all levels, with level pills, a text filter, copy and a link to the
+// same filter in the System Log list. Only shown when the trace had a time window and run identity.
+function runLogsCard(ev) {
+  if (!ev.meta?.runLogQuery) return '';
+  const lines = runLogs(ev.norm);
+  const c = countByGroup(lines);
+  return `<section class="card logs" id="sec-logs" data-jump="Logs ${lines.length}"><h2>Run logs (${lines.length})</h2>
+    <div class="hint">Every level, from lines that name a record of this run or come from its users' sessions, oldest first.</div>
+    ${lines.length ? `<div class="filters" id="logPills">${LOG_GROUPS.filter(g => c[g]).map(g => `<button data-lg="${g}" class="lg-${g}${logGroups.has(g) ? ' on' : ''}">${GROUP_LABEL[g]} ${c[g]}</button>`).join('')}</div>
+    <input type="search" id="logFilter" placeholder="Filter by text, source or user" value="${esc(logQuery)}" autocomplete="off" spellcheck="false">`
+    : '<div class="hint">No log line in the window came from this run. The System Log list shows the same filter, in case lines arrived after the trace.</div>'}
+    <div class="row buttons log-actions">${lines.length ? '<button id="logCopy"></button>' : ''}<button id="logOpen" title="Open the System Log list with this filter, all levels, oldest first">Open in System Log ↗</button></div>
+    <div id="logRows"></div></section>`;
+}
+
+function shownLogs() { return last ? filterLogs(last.logs, { groups: logGroups, text: logQuery }) : []; }
+
+function renderLogRows() {
+  const box = $('logRows');
+  if (!box || !last) return;
+  const shown = shownLogs();
+  const why = { record: ['run record', 'Names a record of this run'], user: ['run user', "Written in a session of one of the run's users"] };
+  box.innerHTML = shown.slice(0, 300).map(l => {
+    const [tag, tip] = why[l.why] || ['', ''];
+    const text = String(l.text);
+    return `<div class="log-row lg-${l.group}">
+      <div class="tl-h"><span class="tl-t">${esc(String(l.created).slice(11))}</span><span class="lv">${esc(levelName(l.level))}</span>
+        <a href="#" data-open="syslog|${esc(l.id)}" title="Open the log record">${esc(l.source || 'syslog')}</a>
+        ${l.user ? `<span class="tl-s">${esc(l.user)}</span>` : ''}${tag ? `<span class="tl-s" title="${esc(tip)}">· ${tag}</span>` : ''}</div>
+      ${text.length > 400 ? `<details><summary class="tl-c">${esc(text.slice(0, 400))}…</summary><div class="tl-c">${esc(text)}</div></details>` : `<div class="tl-c">${esc(text)}</div>`}</div>`;
+  }).join('')
+    + (shown.length > 300 ? `<div class="hint">Showing 300 of ${shown.length}. Copy takes all ${shown.length}.</div>` : '')
+    + (last.logs.length && !shown.length ? '<div class="hint">No line matches the filter.</div>' : '');
+  const copy = $('logCopy');
+  if (copy) { copy.textContent = shown.length === last.logs.length ? `Copy ${shown.length} lines` : `Copy ${shown.length} shown`; copy.disabled = !shown.length; }
+}
+
+async function copyLogs() {
+  const shown = shownLogs();
+  if (!shown.length) return;
+  const text = logsAsText(shown);
+  await navigator.clipboard.writeText(settings.redact ? redactText(text) : text);
+  progress(`Copied ${shown.length} log line${shown.length === 1 ? '' : 's'}${settings.redact ? ' (redacted)' : ''}.`);
+}
+
+function openLogList() {
+  const url = logListUrl(new URL(tab.url).origin, last?.ev.meta?.runLogQuery);
+  if (url) chrome.tabs.create({ url });
+}
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-lg], #logCopy, #logOpen');
+  if (!t || !last) return;
+  if (t.dataset.lg) {
+    const g = t.dataset.lg;
+    logGroups.has(g) ? logGroups.delete(g) : logGroups.add(g);
+    t.classList.toggle('on');
+    renderLogRows();
+  } else if (t.id === 'logCopy') copyLogs();
+  else if (t.id === 'logOpen') openLogList();
+});
+document.addEventListener('input', e => {
+  if (e.target?.id !== 'logFilter') return;
+  logQuery = e.target.value;
+  renderLogRows();
+});
+
+// ---------------- section jump bar ----------------
+
+// One chip per result card, in the sticky header, so a long trace is one click from any section.
+function renderJump() {
+  const nav = $('jump');
+  const secs = [...document.querySelectorAll('#out [data-jump]')].filter(s => !s.classList.contains('hidden'));
+  const chip = label => { const m = String(label).match(/^(.*?) (\d+)$/); return m ? `${esc(m[1])} <span class="n">${m[2]}</span>` : esc(label); };
+  nav.innerHTML = secs.length > 1 ? `<button data-jump-to="top" title="Back to the search box" aria-label="Back to the search box">↑</button>${secs.map(s => `<button data-jump-to="${esc(s.id)}">${chip(s.dataset.jump)}</button>`).join('')}` : '';
+  nav.classList.toggle('hidden', secs.length < 2);
+  document.documentElement.style.setProperty('--head', `${document.querySelector('.top').offsetHeight + 8}px`);
+  spy();
+}
+
+// Highlight the chip of the card at the top of the view.
+function spy() {
+  const head = document.querySelector('.top').offsetHeight + 12;
+  let current = null;
+  for (const s of document.querySelectorAll('#out [data-jump]')) if (s.getBoundingClientRect().top <= head) current = s.id;
+  for (const b of $('jump').querySelectorAll('[data-jump-to]')) b.classList.toggle('on', b.dataset.jumpTo === current);
+}
+let spyRaf = 0;
+window.addEventListener('scroll', () => { if (!spyRaf) spyRaf = requestAnimationFrame(() => { spyRaf = 0; spy(); }); }, { passive: true });
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-jump-to]');
+  if (!t) return;
+  if (t.dataset.jumpTo === 'top') { window.scrollTo({ top: 0 }); $('q').focus({ preventScroll: true }); return; }
+  const el = $(t.dataset.jumpTo);
+  if (!el) return;
+  const d = el.querySelector('details');
+  if (d && el.classList.contains('background')) d.open = true;
+  el.scrollIntoView({ block: 'start' });   // instant: a smooth scroll over a long trace takes over a second
+});
 
 // ---------------- stop actions (opt-in) ----------------
 
@@ -436,8 +547,8 @@ document.addEventListener('click', e => {
   if (t.dataset.trace) { $('q').value = t.dataset.trace; traceInput(t.dataset.trace); }
   else if (t.dataset.open) {
     const [table, id] = t.dataset.open.split('|');
-    const host = new URL(tab.url).origin;
-    if (id) chrome.tabs.create({ url: `${host}/${table}.do?sys_id=${id}` });
+    const url = recordUrl(new URL(tab.url).origin, table, id);
+    if (url) chrome.tabs.create({ url });
   } else if (t.dataset.sev) {
     const s = t.dataset.sev;
     sevFilter.has(s) ? sevFilter.delete(s) : sevFilter.add(s);
@@ -447,15 +558,51 @@ document.addEventListener('click', e => {
 });
 $('btnTrace').addEventListener('click', () => traceInput($('q').value));
 $('q').addEventListener('keydown', e => { if (e.key === 'Enter') traceInput($('q').value); });
-$('btnPage').addEventListener('click', async () => {
-  await refreshTab();
-  const p = parseSnUrl(tab?.url);
-  if (!p.sysId) { progress('No sys_id in the current page URL. Open the agent, plan, tool or skill record first.'); return; }
+function tracePage(url) {
+  const p = parseSnUrl(url);
+  if (!p.sysId) { progress('No sys_id in the page URL. Open the agent, plan, tool, skill or business record first.'); return; }
   $('q').value = p.sysId;
-  run(col => col.trace(tab.url));
-});
+  run(col => col.trace(url));
+}
+$('btnPage').addEventListener('click', async () => { await refreshTab(); tracePage(tab?.url); });
+
+// Right-click menu and keyboard shortcut (background.js) open the panel and leave the request in
+// session storage; the panel picks it up on load, or at once when it is already open.
+let lastPendingAt = 0;
+async function takePending() {
+  let p;
+  try { p = (await chrome.storage.session.get('pendingTrace')).pendingTrace; } catch (e) { return; }
+  if (!p || p.at === lastPendingAt || Date.now() - p.at > 20000) return;
+  try { const w = await chrome.windows.getCurrent(); if (p.windowId && w?.id !== p.windowId) return; } catch (e) {}
+  lastPendingAt = p.at;
+  chrome.storage.session.remove('pendingTrace').catch(() => {});
+  if (!(await refreshTab())) return;
+  if (busy) { progress('A trace is still running. Try again when it finishes.'); return; }
+  if (p.text) { $('q').value = p.text; traceInput(p.text); return; }
+  tracePage([p.frameUrl, p.pageUrl].find(u => u && parseSnUrl(u).sysId) || p.pageUrl);
+}
+chrome.storage.session?.onChanged?.addListener(ch => { if (ch.pendingTrace?.newValue) takePending(); });
+
+// Show the shortcuts Chrome actually assigned. Chrome skips a suggested key that another extension
+// already holds, and leaves the command without one: say "not set" rather than advertise a key
+// that does nothing.
+const SHORTCUTS = [['trace-page', 'Trace this page'], ['_execute_action', 'Open the panel']];
+async function renderShortcuts() {
+  let cmds = [];
+  try { cmds = await chrome.commands.getAll(); } catch (e) { return; }
+  const key = name => cmds.find(c => c.name === name)?.shortcut || '';
+  $('keys').innerHTML = SHORTCUTS.map(([name, label]) =>
+    `${esc(label)}: ${key(name) ? `<kbd>${esc(key(name))}</kbd>` : '<span class="warn">not set</span>'}`).join(' · ');
+  const trace = key('trace-page');
+  $('btnPage').title = `Trace the record open in the current tab (${trace || 'no shortcut set: see Settings'}). Also on the right-click menu of ServiceNow pages.`;
+}
+renderShortcuts();
+$('btnKeys').addEventListener('click', () => chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }));
 $('btnRecent').addEventListener('click', () => run(col => col.recentFailures({ days: 7 })));
-$('btnSettings').addEventListener('click', () => $('settings').classList.toggle('hidden'));
+$('btnSettings').addEventListener('click', () => {
+  // Re-read on open: the user may have just changed a key on the shortcuts page.
+  if ($('settings').classList.toggle('hidden') === false) renderShortcuts();
+});
 for (const id of ['setWindow', 'setRows', 'setStuck', 'setRedact', 'setBodies', 'setActions', 'setKey', 'setModel', 'setClaudeBodies', 'setAsk']) $(id).addEventListener('change', saveSettings);
 $('btnCopy').addEventListener('click', copyReport);
 $('btnJson').addEventListener('click', downloadJson);
@@ -467,4 +614,4 @@ $('btnGrant').addEventListener('click', async () => {
 chrome.tabs.onActivated.addListener(() => refreshTab());
 chrome.tabs.onUpdated.addListener((id, info) => { if (info.url || info.status === 'complete') refreshTab(); });
 
-loadSettings().then(refreshTab);
+loadSettings().then(refreshTab).then(takePending);

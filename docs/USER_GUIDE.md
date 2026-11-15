@@ -14,7 +14,7 @@ What it reads, all through your own logged-in session:
 
 - **The run:** execution plan, execution tasks, agent messages, tool executions, and the Virtual Agent conversation transcript the run belongs to.
 - **The configuration:** agent, tool bindings, the script include, flow or action behind each tool, ACLs, and the roles of the user the agent runs as.
-- **The logs around the run:** Generative AI log, system log warnings and errors, outbound HTTP calls, flow executions, restricted caller access records, AI Guardian tables.
+- **The logs around the run:** Generative AI log, the run's own system log lines at every level, warnings and errors from the same minutes, outbound HTTP calls, flow executions, restricted caller access records, AI Guardian tables.
 - **The platform:** versions and active state of the AI store apps.
 
 Three guarantees hold for every trace:
@@ -59,11 +59,12 @@ To update, replace the folder's contents with the new version and click the relo
 
 The fastest way in is to open the failing record in ServiceNow and click **Use this page**. Click the extension icon on a ServiceNow tab to open the panel; the header shows the instance once it is connected.
 
-There are three ways to start:
+There are four ways to start:
 
 1. **Use this page** traces the record open in the current tab. Classic forms, Next Experience URLs and workspace record URLs all work. In a workspace sub-record (for example evidence inside an ER case), it traces the record on screen and keeps the parent as context. On a business record such as an incident, HR case or evidence, it shows **Otto activity on this record**: every skill call linked to it (Summarize, Refine…), the nested calls a wrapper skill makes, and agent runs about it.
 2. **Trace** takes whatever you type in the box: a sys_id, a record URL, a plan number or part of a name. Press Enter or click the button.
-3. **Recent failures** lists what went wrong in the last 7 days: failed, terminated or stuck execution plans (with the platform's state reason, such as Security Violation), and failed or user-rejected LLM calls (skills included), newest first, each with its reason. Repeats of the same failure are merged into one line with a count (×41), named after the workflow or agent. Click **Trace** next to one. If nothing failed, it lists the latest runs instead.
+3. **Right-click or shortcut.** On any ServiceNow page, right-click and choose **Trace this page with AI Debugger**; right-click a link to a record or a selected sys_id or plan number to trace that instead. **Alt+Shift+U** traces the current page (U as in **Use this page**) and **Alt+Shift+O** opens the panel. The panel opens and starts the trace. Chrome leaves a key unset when another extension already uses it: **Settings → Keyboard shortcuts** shows the keys you actually have, or **not set**, and **Change shortcuts** opens `chrome://extensions/shortcuts`.
+4. **Recent failures** lists what went wrong in the last 7 days: failed, terminated or stuck execution plans (with the platform's state reason, such as Security Violation), and failed or user-rejected LLM calls (skills included), newest first, each with its reason. Repeats of the same failure are merged into one line with a count (×41), named after the workflow or agent. Click **Trace** next to one. If nothing failed, it lists the latest runs instead.
 
 What each input traces:
 
@@ -84,9 +85,26 @@ A typical plan trace makes 60 to 80 read-only calls and finishes in a few second
 
 Tip: start from the **execution plan** whenever you can. It is the only entry point that ties config, run and logs together. When a user reports "the agent didn't work", use **Recent failures** or trace the agent and pick its latest plan.
 
+## Debug a Now Assist / ServiceNow Otto skill
+
+Standard skills such as incident summarization don't create AI Agent records. Each call writes one row to the Generative AI log with the skill, source, caller, prompt configuration, start and end time, token counts, status, the final prompt and the response. The extension starts from that log in four ways.
+
+| Start from | What the trace shows |
+| --- | --- |
+| **Use this page** on the record the skill ran on (incident, HR case, evidence…) | The **Otto activity on this record** card: skill calls linked to the record through the Gen AI log's `metadata_document`, newest first; the nested calls a wrapper skill made at the same moment as the same user; and agent runs with the record as `related_task_record`. In a workspace sub-record, the parent record's activity is included |
+| A Gen AI log entry's sys_id or URL | That call, its skill and prompt configuration, and only the calls made with it: the same user within 5 seconds (a wrapper and the skill it calls) or the same record. Other users' calls in those minutes are left out |
+| The skill's sys_id or name | Its configuration, prompt and capability records, its own `gen_ai_skill` ACL, its 25 most recent calls from all users with model and token counts, the prompt config's token limit, and its usage count |
+| **Recent failures** | Failed or user-rejected skill calls from the last 7 days, each with its error code or reason. Click **Trace** on one |
+
+Each of these runs the skill rules over the calls it found and reads the system log around the latest call. **Run logs** then holds every line from the caller's session, including the asynchronous part of the call, which runs as `system` but keeps the caller as creator. The playbook [A skill gives a wrong, vague or cut-off answer](#a-skill-gives-a-wrong-vague-or-cut-off-answer) says what each finding means.
+
+If a record shows no activity, the skill didn't write the record into `metadata_document`, or it ran seconds ago and the log isn't written yet. Trace the Gen AI log entry or the skill instead.
+
+The extension can't see the browser side of the button (whether it rendered, client errors); use DevTools for that. AI Admin Hub skill diagnostics run server-side checks it doesn't replace.
+
 ## Read the results
 
-Read the panel top to bottom: the root cause card tells you what to fix first, and everything below is the evidence for it.
+Read the panel top to bottom: the root cause card tells you what to fix first, and everything below is the evidence for it. The jump bar under the title (**Cause**, **Findings**, **Timeline**, **Logs**, **Background**, **Claude**, **Evidence**, each with its count) stays on screen while you scroll and goes straight to a card; **↑** goes back to the search box.
 
 | Card | What it shows | How to use it |
 | --- | --- | --- |
@@ -95,6 +113,7 @@ Read the panel top to bottom: the root cause card tells you what to fix first, a
 | Traced | Record type, display value, table, and the UTC log window used | Check it traced what you meant |
 | Most likely root cause | The finding closest to the cause, with detail and a fix | Start here. **Also check** lists up to three other likely causes, because a run can fail for more than one reason |
 | Findings | Every rule that fired, sorted by severity, with chips for the records each was raised from | Click a severity chip to hide or show that level; click a record chip (for example **Tool execution ↗**) to open it |
+| Run logs | Every system log line from this run at every level, oldest first: lines that name one of its records or come from its users' sessions (including the asynchronous part of a skill call, which runs as `system` but keeps the caller as creator) | Click a level to hide or show it, type to filter by text, source or user. **Copy** puts the lines you see on the clipboard as plain text (redacted when redaction is on). **Open in System Log** opens the platform list with the same filter, all levels |
 | Recent failures | Failed or stuck plans and failed or rejected LLM calls from the last 7 days | Click **Trace** on one to drill in |
 | Execution plans | Recent plans for an agent, workflow or conversation | Click **Trace** to drill into one run |
 | AI app versions | Scope, version and active state of the AI store apps | Compare with the store and your patch level |
@@ -110,11 +129,11 @@ The **Conversation timeline** card puts the whole run in time order, so you can 
 | Task | Grey | Each execution task and its state |
 | Tool call | Grey | Tool name, input, output, state and duration |
 | LLM call | Grey | Skill or source, the model's response and state |
-| Error | Red | Error-level system log lines and failed flows from this run: they name one of its records or come from its users' sessions. The same error repeated shows once with a count (×N) |
+| Error | Red | Error and Fatal system log lines and failed flows from this run: they name one of its records or come from its users' sessions. The same error repeated shows once with a count (×N) |
 
 Errors from other jobs and users in the same minutes are left out of the timeline and the findings. The collapsed **Background** card below it groups them by source and message with a count, so you can still see them. On a busy instance that is hundreds of lines a minute.
 
-Click a name to open that record in a new tab. Long text folds; click it to expand. If the plan has no linked conversation (a triggered run, or a test in AI Agent Studio), the card says so and shows the rest of the run. To start from the conversation instead, paste its sys_id: the trace reads the transcript and then the latest plan in it.
+Click a name to open that record in a new tab; flow executions open in Flow Designer's execution view (Workflow Studio on newer releases). Long text folds; click it to expand. If the plan has no linked conversation (a triggered run, or a test in AI Agent Studio), the card says so and shows the rest of the run. To start from the conversation instead, paste its sys_id: the trace reads the transcript and then the latest plan in it.
 
 The root cause is ranked by how close a finding usually sits to the cause, not by severity alone. A failed plan is almost always a symptom, so a tool input mismatch or a broken script include outranks it even when the plan failure is marked Critical.
 
@@ -293,13 +312,15 @@ The Claude settings sit under **Claude analysis (optional)** in the same panel.
 
 Under **Stop actions (optional)**, tick **Offer "stop" scripts for runs, stuck runs and agents** to show the Stop AI Agent processing card. It is off by default. The stuck threshold above also decides which runs count as stuck.
 
+**Keyboard shortcuts** lists the keys Chrome assigned to **Trace this page** (suggested Alt+Shift+U) and **Open the panel** (suggested Alt+Shift+O). **not set** means another extension had the key first. Click **Change shortcuts** to pick one; the line updates the next time you open settings.
+
 ## Export and share
 
 Two buttons at the bottom of the panel turn a trace into something you can paste into an incident, a HI case or a chat with Claude.
 
 | Button | Produces | Best for |
 | --- | --- | --- |
-| **Copy report** | Markdown on the clipboard: instance, who traced, root cause and other likely causes, findings table, agents and tools, tool executions, AI app versions, evidence counts, warnings | Incident notes, Teams or Slack, a HI case, asking Claude for a second opinion |
+| **Copy report** | Markdown on the clipboard: instance, who traced, root cause and other likely causes, findings table, agents and tools, tool executions, the run's log lines (first 80), AI app versions, evidence counts, warnings | Incident notes, Teams or Slack, a HI case, asking Claude for a second opinion |
 | **Download evidence** | A JSON file with the full evidence and the findings | Attaching to a ticket, comparing two runs, deeper analysis |
 
 With redaction on (the default), exports mask:
@@ -397,6 +418,9 @@ Most problems come from the session or from access, not from the extension.
 | A table you expect is never shown | Its name differs on your release | Edit the table list in `lib/config.js`, then reload the extension |
 | Findings look wrong for a field | Field names are matched by pattern (state, error, input, output) | Expand **fields** in the evidence group to see the raw values; report the field name |
 | Panel doesn't open | The extension was disabled or its folder moved | Re-enable it in `chrome://extensions`, or load it again |
+| No **Trace … with AI Debugger** on the right-click menu | The page is on a custom domain (the menu shows on `*.service-now.com` and `*.servicenowservices.com` only), or the extension was updated without a reload | Use **Use this page**; reload the extension in `chrome://extensions` |
+| The shortcut does nothing | Another extension had the key first, so Chrome left it unset (**Settings → Keyboard shortcuts** shows **not set**) | **Change shortcuts** in Settings and pick a free key |
+| **Run logs** shows fewer lines than the System Log list | Lines logged after the trace, or more than 150 info and debug lines | Trace again, or work in the list |
 
 Claude analysis problems:
 
