@@ -79,6 +79,7 @@ pre { background: var(--code); padding: 6px; border-radius: 4px; overflow: auto;
 select { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 5px 6px; margin-left: 6px; max-width: 60%; }
 #settings input[type=password] { width: 60%; margin-left: 6px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; }
 .sub-h { margin-top: 14px; }
+kbd { font: 11px ui-monospace, monospace; background: var(--code); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
 .claude { border-left: 4px solid var(--accent); }
 .claude .answer { margin-top: 8px; }
 .claude .answer h3, .claude .answer h4 { font-size: 13px; margin: 12px 0 4px; }

@@ -35,12 +35,13 @@ Ideas from SN Utils' log viewer, record shortcuts and context menu, built for on
 
 - **Run logs card.** Every system log line from the run at every level (Error, Warning, Info, Debug), oldest first, with level filters, a text filter on message, source or user, **Copy** (plain text, redacted when redaction is on) and **Open in System Log** (the platform list with the same filter, all levels). The report adds the first 80 lines; Claude gets up to 30 info and debug lines next to the warnings and errors. On a live skill call: 37 lines, the same 37 the System Log list shows, against 4 timeline events before.
 - **Jump bar.** One chip per result card in the sticky header, with counts; the chip of the card in view is highlighted.
-- **Right-click and shortcuts.** "Trace this page", "Trace the linked record" and "Trace "<selection>"" on ServiceNow pages; Alt+Shift+T traces the current page, Alt+Shift+D opens the panel. New permission: `contextMenus`.
+- **Right-click and shortcuts.** "Trace this page", "Trace the linked record" and "Trace "<selection>"" on ServiceNow pages; Alt+Shift+U traces the current page, Alt+Shift+O opens the panel. **Settings → Keyboard shortcuts** shows the keys Chrome assigned, or **not set** when another extension had them first, with a button to change them. New permission: `contextMenus`.
 - **Flow executions open in Flow Designer's execution view** (Workflow Studio on newer releases) instead of the `sys_flow_context` form.
 - **Fix: Fatal log lines** (level 3) were not read. They now count as errors in the timeline, the rules and Background.
 - **Fix: async skill work belongs to the run.** Lines written as the caller (`sys_created_by`) but running as `system` (GenAI preprocess, request validators, the Flow Designer callback) now link to the run.
 - The run's warnings and errors, its info and debug lines and the window sample are fetched in parallel.
-- 70 tests.
+- **Fix, found in a live check in Chrome: the first shortcuts never worked on Windows or Linux.** Alt+Shift+T and Alt+Shift+D are Chrome's own keys there (focus toolbar, duplicate tab), and Chrome won't give those to an extension. A test now checks the suggested keys against Chrome's shortcut table.
+- 72 tests.
 
 ## 0.5.0 — 2026-10-31 (Brazil update)
 

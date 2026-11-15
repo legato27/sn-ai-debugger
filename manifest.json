@@ -13,8 +13,8 @@
   "side_panel": { "default_path": "sidepanel.html" },
   "background": { "service_worker": "background.js", "type": "module" },
   "commands": {
-    "_execute_action": { "suggested_key": { "default": "Alt+Shift+D" }, "description": "Open AI Debugger" },
-    "trace-page": { "suggested_key": { "default": "Alt+Shift+T" }, "description": "Trace the ServiceNow record on this page" }
+    "_execute_action": { "suggested_key": { "default": "Alt+Shift+O" }, "description": "Open AI Debugger" },
+    "trace-page": { "suggested_key": { "default": "Alt+Shift+U" }, "description": "Trace the ServiceNow record on this page" }
   },
   "permissions": ["sidePanel", "scripting", "storage", "tabs", "contextMenus"],
   "host_permissions": [

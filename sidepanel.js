@@ -583,13 +583,26 @@ async function takePending() {
 }
 chrome.storage.session?.onChanged?.addListener(ch => { if (ch.pendingTrace?.newValue) takePending(); });
 
-// Show the shortcut the user actually has (it can be changed in chrome://extensions/shortcuts).
-chrome.commands?.getAll?.().then(cmds => {
-  const key = cmds.find(c => c.name === 'trace-page')?.shortcut;
-  if (key) $('btnPage').title = `Trace the record open in the current tab (${key}). Also on the right-click menu of ServiceNow pages.`;
-}).catch(() => {});
+// Show the shortcuts Chrome actually assigned. Chrome skips a suggested key that another extension
+// already holds, and leaves the command without one: say "not set" rather than advertise a key
+// that does nothing.
+const SHORTCUTS = [['trace-page', 'Trace this page'], ['_execute_action', 'Open the panel']];
+async function renderShortcuts() {
+  let cmds = [];
+  try { cmds = await chrome.commands.getAll(); } catch (e) { return; }
+  const key = name => cmds.find(c => c.name === name)?.shortcut || '';
+  $('keys').innerHTML = SHORTCUTS.map(([name, label]) =>
+    `${esc(label)}: ${key(name) ? `<kbd>${esc(key(name))}</kbd>` : '<span class="warn">not set</span>'}`).join(' · ');
+  const trace = key('trace-page');
+  $('btnPage').title = `Trace the record open in the current tab (${trace || 'no shortcut set: see Settings'}). Also on the right-click menu of ServiceNow pages.`;
+}
+renderShortcuts();
+$('btnKeys').addEventListener('click', () => chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }));
 $('btnRecent').addEventListener('click', () => run(col => col.recentFailures({ days: 7 })));
-$('btnSettings').addEventListener('click', () => $('settings').classList.toggle('hidden'));
+$('btnSettings').addEventListener('click', () => {
+  // Re-read on open: the user may have just changed a key on the shortcuts page.
+  if ($('settings').classList.toggle('hidden') === false) renderShortcuts();
+});
 for (const id of ['setWindow', 'setRows', 'setStuck', 'setRedact', 'setBodies', 'setActions', 'setKey', 'setModel', 'setClaudeBodies', 'setAsk']) $(id).addEventListener('change', saveSettings);
 $('btnCopy').addEventListener('click', copyReport);
 $('btnJson').addEventListener('click', downloadJson);

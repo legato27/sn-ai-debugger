@@ -6,7 +6,7 @@ A Manifest V3 extension with no build step and no dependencies. Everything is pl
 
 | Path | Role |
 | --- | --- |
-| `manifest.json` | Permissions: `sidePanel`, `scripting`, `storage`, `tabs`, `contextMenus`; commands `_execute_action` (Alt+Shift+D) and `trace-page` (Alt+Shift+T); hosts `*.service-now.com`, `*.servicenowservices.com`, `api.anthropic.com`; optional hosts for custom domains |
+| `manifest.json` | Permissions: `sidePanel`, `scripting`, `storage`, `tabs`, `contextMenus`; commands `_execute_action` (Alt+Shift+O) and `trace-page` (Alt+Shift+U), chosen outside Chrome's own shortcuts on every desktop platform (Chrome won't assign those to an extension); hosts `*.service-now.com`, `*.servicenowservices.com`, `api.anthropic.com`; optional hosts for custom domains |
 | `background.js` | Opens the side panel from the toolbar icon, the right-click menu on ServiceNow pages and the `trace-page` shortcut; leaves the request (page URL, frame URL, link or selected text) in `chrome.storage.session` for the panel to pick up |
 | `sidepanel.html` / `.css` / `.js` | The UI: input, cards, settings, exports, Claude card, stop actions card |
 | `lib/sn-client.js` | Read-only REST client. `pageGet` is injected into the ServiceNow tab (MAIN world) and issues same-origin `GET`s with the session and `g_ck` token; an allowlist rejects anything but `/api/now/table/*` and `/api/now/stats/*` |
@@ -85,6 +85,7 @@ Read from a live Australia patch 7 instance; the mock instance reproduces each o
 | `test/claude.test.mjs` | Compact evidence, redaction before send, prompt-injection wrapping, streaming client, headers, errors, follow-up history |
 | `test/skills.test.mjs` | Skill table from the dictionary, unfilled prompt variables, truncation and the token-limit chain, flow quick mode, `sn-gaf` errors, Recent failures, evidence links; terminated plans and state_reason, PLAN-SECURITY, document-ID links, workflow → team → member, window-noise filters, user name from sys_user, `{ link, value }` dictionary rows. `findEmptyGrounding`, including shapes from real prompts (section headers, output templates, JSON messages) |
 | `test/logs.test.mjs` | Run logs at every level from the mock's info and debug lines, level names (Fatal is an error), filters, plain-text copy, report and Claude payload, System Log list link, Flow Designer link, the `sys_created_by`/`_user` link rule |
+| `test/manifest.test.mjs` | Suggested shortcuts avoid Chrome's own Alt+Shift keys (`accelerator_table.cc`) on Windows and Linux; the docs name the manifest's keys |
 | `test/actions.test.mjs` | Stop scripts executed against an in-memory Glide runtime: dry run, apply, instance lock, age check, cap, no-choice skip, flow opt-in, deactivate, script-injection safety |
 | `test/e2e.mjs` | Loads the unpacked extension in Chromium, maps `mock.service-now.com` to the mock instance, runs traces, Claude analysis and the Scripts - Background fill (verifies it is never submitted) |
 

@@ -63,7 +63,7 @@ There are four ways to start:
 
 1. **Use this page** traces the record open in the current tab. Classic forms, Next Experience URLs and workspace record URLs all work. In a workspace sub-record (for example evidence inside an ER case), it traces the record on screen and keeps the parent as context. On a business record such as an incident, HR case or evidence, it shows **Otto activity on this record**: every skill call linked to it (Summarize, Refine…), the nested calls a wrapper skill makes, and agent runs about it.
 2. **Trace** takes whatever you type in the box: a sys_id, a record URL, a plan number or part of a name. Press Enter or click the button.
-3. **Right-click or shortcut.** On any ServiceNow page, right-click and choose **Trace this page with AI Debugger**; right-click a link to a record or a selected sys_id or plan number to trace that instead. **Alt+Shift+T** traces the current page and **Alt+Shift+D** opens the panel; change them at `chrome://extensions/shortcuts`. The panel opens and starts the trace.
+3. **Right-click or shortcut.** On any ServiceNow page, right-click and choose **Trace this page with AI Debugger**; right-click a link to a record or a selected sys_id or plan number to trace that instead. **Alt+Shift+U** traces the current page (U as in **Use this page**) and **Alt+Shift+O** opens the panel. The panel opens and starts the trace. Chrome leaves a key unset when another extension already uses it: **Settings → Keyboard shortcuts** shows the keys you actually have, or **not set**, and **Change shortcuts** opens `chrome://extensions/shortcuts`.
 4. **Recent failures** lists what went wrong in the last 7 days: failed, terminated or stuck execution plans (with the platform's state reason, such as Security Violation), and failed or user-rejected LLM calls (skills included), newest first, each with its reason. Repeats of the same failure are merged into one line with a count (×41), named after the workflow or agent. Click **Trace** next to one. If nothing failed, it lists the latest runs instead.
 
 What each input traces:
@@ -295,6 +295,8 @@ The Claude settings sit under **Claude analysis (optional)** in the same panel.
 
 Under **Stop actions (optional)**, tick **Offer "stop" scripts for runs, stuck runs and agents** to show the Stop AI Agent processing card. It is off by default. The stuck threshold above also decides which runs count as stuck.
 
+**Keyboard shortcuts** lists the keys Chrome assigned to **Trace this page** (suggested Alt+Shift+U) and **Open the panel** (suggested Alt+Shift+O). **not set** means another extension had the key first. Click **Change shortcuts** to pick one; the line updates the next time you open settings.
+
 ## Export and share
 
 Two buttons at the bottom of the panel turn a trace into something you can paste into an incident, a HI case or a chat with Claude.
@@ -399,7 +401,8 @@ Most problems come from the session or from access, not from the extension.
 | A table you expect is never shown | Its name differs on your release | Edit the table list in `lib/config.js`, then reload the extension |
 | Findings look wrong for a field | Field names are matched by pattern (state, error, input, output) | Expand **fields** in the evidence group to see the raw values; report the field name |
 | Panel doesn't open | The extension was disabled or its folder moved | Re-enable it in `chrome://extensions`, or load it again |
-| No **Trace … with AI Debugger** on the right-click menu, or the shortcut does nothing | The page is on a custom domain (the menu shows on `*.service-now.com` and `*.servicenowservices.com` only), the extension was updated without a reload, or another extension took the key | Use **Use this page**; reload the extension in `chrome://extensions`; set the key at `chrome://extensions/shortcuts` |
+| No **Trace … with AI Debugger** on the right-click menu | The page is on a custom domain (the menu shows on `*.service-now.com` and `*.servicenowservices.com` only), or the extension was updated without a reload | Use **Use this page**; reload the extension in `chrome://extensions` |
+| The shortcut does nothing | Another extension had the key first, so Chrome left it unset (**Settings → Keyboard shortcuts** shows **not set**) | **Change shortcuts** in Settings and pick a free key |
 | **Run logs** shows fewer lines than the System Log list | Lines logged after the trace, or more than 150 info and debug lines | Trace again, or work in the list |
 
 Claude analysis problems:
