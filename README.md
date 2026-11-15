@@ -74,12 +74,12 @@ See [SECURITY.md](SECURITY.md) for details and how to report a problem.
 
 ## Status
 
-Version 0.5.0. Tested against a mock ServiceNow instance, a mock Messages API and an in-memory Glide runtime (60 Node tests plus a Chromium end-to-end run). Checked read-only against one live instance (Australia patch 7): the table names the extension probes at run time all exist there (see [Architecture](docs/ARCHITECTURE.md#table-names)). Other releases may differ; issues and pull requests with real-instance findings are welcome.
+Version 0.5.0. Tested against a mock ServiceNow instance, a mock Messages API and an in-memory Glide runtime (74 Node tests plus a Chromium end-to-end run). Checked read-only against one live instance (Australia patch 7): the table names the extension probes at run time all exist there (see [Architecture](docs/ARCHITECTURE.md#table-names)). Other releases may differ; issues and pull requests with real-instance findings are welcome.
 
 ## Development
 
 ```bash
-npm test          # 60 Node tests: collectors, rules, skills, redaction, timeline, Claude client, stop scripts
+npm test          # 74 Node tests: collectors, rules, skills, logs, redaction, timeline, Claude client, stop scripts, manifest
 ```
 
 End-to-end test (loads the extension in Chromium against a local mock instance; needs Playwright):
