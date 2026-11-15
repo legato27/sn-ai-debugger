@@ -85,6 +85,23 @@ A typical plan trace makes 60 to 80 read-only calls and finishes in a few second
 
 Tip: start from the **execution plan** whenever you can. It is the only entry point that ties config, run and logs together. When a user reports "the agent didn't work", use **Recent failures** or trace the agent and pick its latest plan.
 
+## Debug a Now Assist / ServiceNow Otto skill
+
+Standard skills such as incident summarization don't create AI Agent records. Each call writes one row to the Generative AI log with the skill, source, caller, prompt configuration, start and end time, token counts, status, the final prompt and the response. The extension starts from that log in four ways.
+
+| Start from | What the trace shows |
+| --- | --- |
+| **Use this page** on the record the skill ran on (incident, HR case, evidence…) | The **Otto activity on this record** card: skill calls linked to the record through the Gen AI log's `metadata_document`, newest first; the nested calls a wrapper skill made at the same moment as the same user; and agent runs with the record as `related_task_record`. In a workspace sub-record, the parent record's activity is included |
+| A Gen AI log entry's sys_id or URL | That call, its skill and prompt configuration, and only the calls made with it: the same user within 5 seconds (a wrapper and the skill it calls) or the same record. Other users' calls in those minutes are left out |
+| The skill's sys_id or name | Its configuration, prompt and capability records, its own `gen_ai_skill` ACL, its 25 most recent calls from all users with model and token counts, the prompt config's token limit, and its usage count |
+| **Recent failures** | Failed or user-rejected skill calls from the last 7 days, each with its error code or reason. Click **Trace** on one |
+
+Each of these runs the skill rules over the calls it found and reads the system log around the latest call. **Run logs** then holds every line from the caller's session, including the asynchronous part of the call, which runs as `system` but keeps the caller as creator. The playbook [A skill gives a wrong, vague or cut-off answer](#a-skill-gives-a-wrong-vague-or-cut-off-answer) says what each finding means.
+
+If a record shows no activity, the skill didn't write the record into `metadata_document`, or it ran seconds ago and the log isn't written yet. Trace the Gen AI log entry or the skill instead.
+
+The extension can't see the browser side of the button (whether it rendered, client errors); use DevTools for that. AI Admin Hub skill diagnostics run server-side checks it doesn't replace.
+
 ## Read the results
 
 Read the panel top to bottom: the root cause card tells you what to fix first, and everything below is the evidence for it. The jump bar under the title (**Cause**, **Findings**, **Timeline**, **Logs**, **Background**, **Claude**, **Evidence**, each with its count) stays on screen while you scroll and goes straight to a card; **↑** goes back to the search box.
